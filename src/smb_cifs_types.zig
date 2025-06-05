@@ -1,3 +1,5 @@
+const std = @import("std");
+
 // CONSTANTS
 
 pub const SMB_GEA_ATTR_NAME_MAX_LEN = (1 << 8) - 1;
@@ -6,7 +8,7 @@ pub const SMB_FEA_ATTR_NAME_MAX_LEN = SMB_GEA_ATTR_NAME_MAX_LEN;
 
 pub const SMB_FEA_ATTR_VALUE_MAX_LEN = (1 << 16) - 1;
 
-pub const PROTOCOL: [4]u8 = "\xFFSMB";
+pub const PROTOCOL: [4]u8 = .{ 0xFF, 'S', 'M', 'B' };
 
 pub const SMB_PARAMETERS_MAX_WORDS = ((1 << 8) - 1);
 
@@ -1687,8 +1689,8 @@ pub const SmbFlags2 = enum(u16) {
     /// permission but does have execute permission. This bit field SHOULD be
     /// set to 1 when the negotiated dialect is LANMAN2.0 or later. This flag is
     /// also known as SMB_FLAGS2_READ_IF_EXECUTE.
-    SMB_FLAGS2_PAGING_IO = (1 << 13),
-    SMB_FLAGS2_READ_IF_EXECUTE = (1 << 13),
+    SMB_FLAGS2_PAGING_IO_READ_IF_EXECUTE = (1 << 13),
+    // SMB_FLAGS2_READ_IF_EXECUTE = (1 << 13),
 
     /// @brief If this bit is set in a client request, the server MUST return
     /// errors as 32-bit NTSTATUS codes in the response. If it is clear, the
@@ -1733,7 +1735,7 @@ pub const SmbSecurityFeatures = packed struct {
 };
 
 /// @brief The SMB_Header structure is a fixed 32-bytes in length.
-pub const SmbMessageHeader = packed struct {
+pub const SmbMessageHeader = extern struct {
     /// @brief This field MUST contain the 4-byte literal string '\xFF', 'S',
     /// 'M', 'B', with the letters represented by their respective ASCII values
     /// in the order shown. In the earliest available SMB documentation, this
@@ -1795,14 +1797,14 @@ pub const SmbParameters = packed struct {
     /// be zero, indicating that the Words field is empty. Note that the size of
     /// this field is one byte and comes after the fixed 32-byte SMB Header,
     /// which causes the Words field to be unaligned.
-    words_count: u8,
+    words_count: u8 = 0,
 
     /// @brief The message-specific parameters structure. The size of this field
     /// MUST be (2 x WordCount) bytes. If WordCount is 0x00, this field is not
     /// included.
     ///
     /// @note Maximum elements : SMB_PARAMETERS_MAX_WORDS
-    words: [*]u16,
+    words: ?[*]u16 = null,
 };
 
 /// @brief The general structure of the data block is similar to that of the
@@ -1814,13 +1816,13 @@ pub const SmbData = packed struct {
     /// SMB_Parameters.Words field is unaligned and the SMB_Data.ByteCount field
     /// is two bytes in size, the first byte of SMB_Data.Bytes is also
     /// unaligned.
-    bytes_count: u16,
+    bytes_count: u16 = 0,
 
     /// @brief The message-specific data structure. The size of this field MUST
     /// be ByteCount bytes. If ByteCount is 0x0000, this field is not included.
     ///
     /// @note Maximum elements : SMB_DATA_MAX_BYTES
-    bytes: [*]u8,
+    bytes: ?[*]u8 = null,
 };
 
 /// @brief Returns a pointer to the begining of the SMB Message Header.
@@ -1991,4 +1993,119 @@ pub const SmbAccessMode = enum(u16) {
     // Writethrough Mode (Bit 14, Mask 0x4000)
     WRITETHROUGH_MODE_WRITEBACK = (0x00 << 14),
     WRITETHROUGH_MODE_WRITETHROUGH = (0x01 << 14),
+};
+
+/// @brief SMB Messages are divisible into three parts:
+/// - A fixed-length header
+/// - A variable length parameter block
+/// - A variable length data block
+/// The header identifies the message as an SMB message, specifies the command
+/// to be executed, and provides context. In a response message, the header
+/// also includes status information that indicates whether (and how) the
+/// command succeeded or failed.
+///
+/// The parameter block is a short array of two-byte values (words), while the
+/// data block is an array of up to 64 KB in size. The structure and contents
+/// of these blocks are specific to each SMB message.
+///
+/// SMB messages are structured this way because the protocol was originally
+/// conceived of as a rudimentary remote procedure call system. The parameter
+/// values were meant to represent the parameters passed into a function. The
+/// data section would contain larger structures or data buffers, such as the
+/// block of data to be written using an SMB_COM_WRITE command. Although the
+/// protocol has evolved over time, this differentiation has been generally
+/// maintained.
+pub const SmbMessage = struct {
+    /// @brief The SMB_Header structure is a fixed 32-bytes in length.
+    header: SmbMessageHeader,
+
+    /// @brief The SMB_Parameters structure has a variable length.
+    parameters: SmbParameters,
+
+    /// @brief The SMB_Data structure has a variable length.
+    data: SmbData,
+
+    allocator: std.mem.Allocator,
+
+    pub fn create(allocator: std.mem.Allocator) !*SmbMessage {
+        var smbMessage = try allocator.create(SmbMessage);
+        errdefer _ = allocator.destroy(smbMessage);
+
+        smbMessage.allocator = allocator;
+        smbMessage.parameters.words_count = 0;
+        smbMessage.data.bytes_count = 0;
+        return smbMessage;
+    }
+
+    pub fn deserialize(self: *SmbMessage, bytes: [*]const u8) !*SmbMessage {
+        var offset: u64 = 0;
+        var message = try self.allocator.create(SmbMessage);
+        errdefer _ = self.allocator.destroy(message);
+
+        // Get the SMB_Header :
+        message.header = std.mem.bytesAsValue(SmbMessageHeader, bytes[0..32]);
+        offset += 32;
+
+        // Get the SMB_Parameters :
+        message.parameters.words_count = std.mem.bytesAsValue(u8, bytes[offset..(offset + 1)]);
+        offset += 1;
+        if (message.parameters.words_count > 0) {
+            message.parameters.words = try self.allocator.alloc(u16, message.parameters.words_count);
+            errdefer _ = self.allocator.free(message.parameters.words.?);
+
+            const parametersChunk = std.mem.bytesAsSlice(u16, bytes[offset..(offset + (message.parameters.words_count * 2))]);
+            std.mem.copyForwards(u16, message.parameters.words, parametersChunk);
+
+            offset += message.parameters.words_count * 2;
+        }
+
+        // Get the SMB_Data :
+        message.data.bytes_count = std.mem.bytesAsValue(u16, bytes[offset..(offset + 2)]);
+        offset += 2;
+        if (message.data.bytes_count > 0) {
+            message.data.bytes = try self.allocator.alloc(u8, message.data.bytes_count);
+            errdefer _ = self.allocator.free(message.data.bytes.?);
+
+            const dataChunk = std.mem.bytesAsSlice(u8, bytes[offset..(offset + message.data.bytes_count)]);
+            std.mem.copyForwards(u8, message.data.bytes, dataChunk);
+
+            offset += message.data.bytes_count;
+        }
+        return message;
+    }
+
+    pub fn serialize(self: *const SmbMessage, allocator: std.mem.Allocator) ![]u8 {
+        var offset: u64 = 0;
+        const totalSize: u64 = 32 + self.parameters.words_count * 2 + self.data.bytes_count;
+
+        const bytes: []u8 = try allocator.alloc(u8, totalSize);
+        errdefer _ = allocator.free(bytes);
+
+        const struct_bytes = std.mem.asBytes(&self.header);
+        std.mem.copyForwards(u8, bytes, struct_bytes);
+        offset += 32;
+
+        // if (self.parameters.words_count > 0) {
+        //     const parameterWordsBytes = std.mem.bytesAsSlice(u8, self.parameters.words.?);
+        //     @memcpy(bytes[offset..], parameterWordsBytes);
+        //     offset += self.parameters.words_count;
+        // }
+
+        // if (self.data.bytes_count > 0) {
+        //     @memcpy(bytes[offset..], self.data.bytes.?);
+        //     offset += self.data.bytes_count;
+        // }
+
+        std.debug.assert(offset == totalSize);
+
+        return bytes;
+    }
+
+    pub fn destroy(self: *SmbMessage) void {
+        // if (self.parameters.words_count > 0)
+        //     self.allocator.free(self.parameters.words.?);
+        // if (self.data.bytes_count > 0)
+        //     self.allocator.free(self.data.bytes.?);
+        self.allocator.destroy(self);
+    }
 };
