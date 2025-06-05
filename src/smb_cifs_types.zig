@@ -2017,30 +2017,22 @@ pub const SmbAccessMode = enum(u16) {
 /// maintained.
 pub const SmbMessage = struct {
     /// @brief The SMB_Header structure is a fixed 32-bytes in length.
-    header: SmbMessageHeader,
+    header: SmbMessageHeader = .{},
 
     /// @brief The SMB_Parameters structure has a variable length.
-    parameters: SmbParameters,
+    parameters: SmbParameters = .{},
 
     /// @brief The SMB_Data structure has a variable length.
-    data: SmbData,
+    data: SmbData = .{},
 
     allocator: std.mem.Allocator,
 
-    pub fn create(allocator: std.mem.Allocator) !*SmbMessage {
-        var smbMessage = try allocator.create(SmbMessage);
-        errdefer _ = allocator.destroy(smbMessage);
+    pub fn deserialize(allocator: std.mem.Allocator, bytes: [*]const u8) !*SmbMessage {
+        const message = try allocator.create(SmbMessage);
+        errdefer _ = allocator.destroy(message);
+        message.allocator = allocator;
 
-        smbMessage.allocator = allocator;
-        smbMessage.parameters.words_count = 0;
-        smbMessage.data.bytes_count = 0;
-        return smbMessage;
-    }
-
-    pub fn deserialize(self: *SmbMessage, bytes: [*]const u8) !*SmbMessage {
-        var offset: u64 = 0;
-        var message = try self.allocator.create(SmbMessage);
-        errdefer _ = self.allocator.destroy(message);
+        var offset: u32 = 0;
 
         // Get the SMB_Header :
         message.header = std.mem.bytesAsValue(SmbMessageHeader, bytes[0..32]);
@@ -2050,8 +2042,8 @@ pub const SmbMessage = struct {
         message.parameters.words_count = std.mem.bytesAsValue(u8, bytes[offset..(offset + 1)]);
         offset += 1;
         if (message.parameters.words_count > 0) {
-            message.parameters.words = try self.allocator.alloc(u16, message.parameters.words_count);
-            errdefer _ = self.allocator.free(message.parameters.words.?);
+            message.parameters.words = try allocator.alloc(u16, message.parameters.words_count);
+            errdefer _ = allocator.free(message.parameters.words.?);
 
             const parametersChunk = std.mem.bytesAsSlice(u16, bytes[offset..(offset + (message.parameters.words_count * 2))]);
             std.mem.copyForwards(u16, message.parameters.words, parametersChunk);
@@ -2063,8 +2055,8 @@ pub const SmbMessage = struct {
         message.data.bytes_count = std.mem.bytesAsValue(u16, bytes[offset..(offset + 2)]);
         offset += 2;
         if (message.data.bytes_count > 0) {
-            message.data.bytes = try self.allocator.alloc(u8, message.data.bytes_count);
-            errdefer _ = self.allocator.free(message.data.bytes.?);
+            message.data.bytes = try allocator.alloc(u8, message.data.bytes_count);
+            errdefer _ = allocator.free(message.data.bytes.?);
 
             const dataChunk = std.mem.bytesAsSlice(u8, bytes[offset..(offset + message.data.bytes_count)]);
             std.mem.copyForwards(u8, message.data.bytes, dataChunk);
@@ -2085,16 +2077,16 @@ pub const SmbMessage = struct {
         std.mem.copyForwards(u8, bytes, struct_bytes);
         offset += 32;
 
-        // if (self.parameters.words_count > 0) {
-        //     const parameterWordsBytes = std.mem.bytesAsSlice(u8, self.parameters.words.?);
-        //     @memcpy(bytes[offset..], parameterWordsBytes);
-        //     offset += self.parameters.words_count;
-        // }
+        if (self.parameters.words_count > 0) {
+            const parameterWordsBytes = std.mem.bytesAsSlice(u8, self.parameters.words.?);
+            @memcpy(bytes[offset..], parameterWordsBytes);
+            offset += self.parameters.words_count;
+        }
 
-        // if (self.data.bytes_count > 0) {
-        //     @memcpy(bytes[offset..], self.data.bytes.?);
-        //     offset += self.data.bytes_count;
-        // }
+        if (self.data.bytes_count > 0) {
+            @memcpy(bytes[offset..], self.data.bytes.?);
+            offset += self.data.bytes_count;
+        }
 
         std.debug.assert(offset == totalSize);
 
@@ -2102,10 +2094,10 @@ pub const SmbMessage = struct {
     }
 
     pub fn destroy(self: *SmbMessage) void {
-        // if (self.parameters.words_count > 0)
-        //     self.allocator.free(self.parameters.words.?);
-        // if (self.data.bytes_count > 0)
-        //     self.allocator.free(self.data.bytes.?);
+        if (self.parameters.words_count > 0)
+            self.allocator.free(self.parameters.words.?);
+        if (self.data.bytes_count > 0)
+            self.allocator.free(self.data.bytes.?);
         self.allocator.destroy(self);
     }
 };

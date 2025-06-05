@@ -1,18 +1,34 @@
 const std = @import("std");
 const lib = @import("zig_smb_cifs_lib");
 
+fn readFile(filename: []const u8, output: [*]u8) !void {
+const cwd = std.fs.cwd();
+    var output_dir = try cwd.openDir(".", .{});
+    defer output_dir.close();
+
+    const file = try output_dir.openFile(filename, .{});
+    defer file.close();
+
+    var content = [_]u8{'A'} ** 64;
+    // this should print out : `AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA`
+    std.debug.print("{s}\n", .{content});
+
+    // okay, seems like a threat of violence is not the answer in this case
+    // can you go here to find a way to read the content?
+    // https://ziglang.org/documentation/master/std/#std.fs.File
+    // hint: you might find two answers that are both valid in this case
+    const bytes_read = try file.read(&content);
+}
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
 
     const allocator = gpa.allocator();
 
-    var message = try lib.smb_cifs.SmbMessage.create(allocator);
+    const rawBytes: []u8 = "";
+    const message = try lib.smb_cifs.SmbMessage.deserialize(allocator, rawBytes);
     defer _ = message.destroy();
 
-    message.header = .{ .command = lib.smb_cifs.SmbCom.SMB_COM_COPY, .flags = lib.smb_cifs.SmbFlags.SMB_FLAGS_BUF_AVAILABLE, .flags2 = lib.smb_cifs.SmbFlags2.SMB_FLAGS2_DFS, .mid = 0, .pid_high = 0, .pid_low = 0, .reserved = 0, .security_features = .{ 0, 0, 0, 0, 0, 0, 0, 0 }, .status = 0, .tid = 0, .uid = 0 };
-    std.debug.print("{d} * 2 + {d}\n", .{ message.parameters.words_count, message.data.bytes_count });
-    const serializedBytes = try message.serialize(allocator);
-    defer allocator.free(serializedBytes);
-    std.debug.print("{b}\n", .{serializedBytes});
+    std.debug.print("{any}\n", .{message});
 }
