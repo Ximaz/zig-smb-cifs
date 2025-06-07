@@ -1986,7 +1986,7 @@ pub const SmbMessage = struct {
         self.header = std.mem.bytesToValue(SmbMessageHeader, bytes[offset..][0..32]);
         offset += 32;
 
-        self.parameters.words_count = std.mem.bytesToValue(u8, bytes[offset..][0..1]);
+        self.parameters.words_count = std.mem.bytesToValue(u8, bytes[offset]);
         offset += 1;
         if (self.parameters.words_count > 0) {
             const parameters_words = try self.allocator.alloc(u16, self.parameters.words_count);
