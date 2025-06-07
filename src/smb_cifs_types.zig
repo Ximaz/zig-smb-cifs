@@ -1570,6 +1570,8 @@ pub const SmbDataBufferFormatCode = enum(u8) {
 /// @brief An 8-bit field of 1-bit flags describing various features in effect
 /// for the message.
 pub const SmbFlags = enum(u8) {
+    SMB_FLAGS_NONE = 0x0,
+
     /// @brief This bit is set (1) in the SMB_COM_NEGOTIATE (0x72) Response if
     /// the server supports SMB_COM_LOCK_AND_READ (0x13) and
     /// SMB_COM_WRITE_AND_UNLOCK (0x14) commands.
@@ -1640,6 +1642,8 @@ pub const SmbFlags = enum(u8) {
 /// @brief A 16-bit field of 1-bit flags that represent various features in
 /// effect for the message. Unspecified bits are reserved and MUST be zero.
 pub const SmbFlags2 = enum(u16) {
+    SMB_FLAGS2_NONE = 0x00,
+
     /// @brief If the bit is set, the message MAY contain long file names.
     /// If the bit is clear then file names in the message MUST adhere to the
     /// 8.3 naming convention.
@@ -1716,7 +1720,7 @@ pub const SmbComNegociateSecurityFeatures = extern struct {
     /// 8-byte cryptographic message signature that can be used to detect
     /// whether the message was modified while in transit. The use of message
     /// signing is mutually exclusive with connectionless transport.
-    security_signature: [8]u8,
+    security_signature: [8]u8 align(1),
 };
 
 /// @brief In the case that CIFS is being transported over a connectionless
@@ -1724,14 +1728,14 @@ pub const SmbComNegociateSecurityFeatures = extern struct {
 pub const SmbSecurityFeatures = extern struct {
     /// @brief An encryption key used for validating messages over
     /// connectionless transports.
-    key: u64,
+    key: u64 align(1),
 
     /// @brief A connection identifier (CID).
-    cid: CID,
+    cid: CID align(1),
 
     /// @brief A number used to identify the sequence of a message over
     /// connectionless transports.
-    sequence_number: u16,
+    sequence_number: u16 align(1),
 };
 
 /// @brief The SMB_Header structure is a fixed 32-bytes in length.
@@ -1741,47 +1745,47 @@ pub const SmbMessageHeader = extern struct {
     /// in the order shown. In the earliest available SMB documentation, this
     /// field is defined as a one byte message type (0xFF) followed by a three
     /// byte server type identifier.
-    protocol: [4]u8 = PROTOCOL,
+    protocol: [4]u8 align(1) = PROTOCOL,
 
     /// @brief A one-byte command code.
-    command: SmbCom,
+    command: SmbCom align(1) = .SMB_COM_CREATE_DIRECTORY,
 
     /// @brief A 32-bit field used to communicate error messages from the server
     /// to the client.
-    status: i32,
+    status: i32 align(1) = 0x0000,
 
     /// @brief An 8-bit field of 1-bit flags describing various features in
     /// effect for the message.
-    flags: SmbFlags,
+    flags: SmbFlags align(1) = .SMB_FLAGS_NONE,
 
     /// @brief A 16-bit field of 1-bit flags that represent various features in
     /// effect for the message. Unspecified bits are reserved and MUST be zero.
-    flags2: SmbFlags2,
+    flags2: SmbFlags2 align(1) = .SMB_FLAGS2_NONE,
 
     /// @brief If set to a nonzero value, this field represents the high-order
     /// bytes of a process identifier (PID). It is combined with the PIDLow
     /// field below to form a full PID.
-    pid_high: u16,
+    pid_high: u16 align(1) = 0x00,
 
     /// @brief Neither an smb_com_negociate_security_features_t nor an
     /// smb_security_features_t context, so it MUST be set to zero by the client
     /// and MUST be ignored by the server.
-    security_features: [8]u8,
+    security_features: [8]u8 align(1) = .{ 0, 0, 0, 0, 0, 0, 0, 0 },
 
     /// @brief This field is reserved and SHOULD be set to 0x0000.
-    reserved: u16,
+    reserved: u16 align(1) = 0x0000,
 
     /// @brief A tree identifier (TID).
-    tid: TID,
+    tid: TID align(1) = 0x00,
 
     /// @brief The lower 16-bits of the PID.
-    pid_low: u16,
+    pid_low: u16 align(1) = 0x00,
 
     /// @brief A user identifier (UID).
-    uid: UID,
+    uid: UID align(1) = 0x00,
 
     /// @brief A multiplex identifier (MID).
-    mid: MID,
+    mid: MID align(1) = 0x00,
 };
 
 /// @brief SMB was originally designed as a rudimentary remote procedure call
@@ -1797,14 +1801,14 @@ pub const SmbParameters = extern struct {
     /// be zero, indicating that the Words field is empty. Note that the size of
     /// this field is one byte and comes after the fixed 32-byte SMB Header,
     /// which causes the Words field to be unaligned.
-    words_count: u8 = 0,
+    words_count: u8 align(1) = 0x00,
 
     /// @brief The message-specific parameters structure. The size of this field
     /// MUST be (2 x WordCount) bytes. If WordCount is 0x00, this field is not
     /// included.
     ///
     /// @note Maximum elements : SMB_PARAMETERS_MAX_WORDS
-    words: ?*[]u16 = null,
+    words: [*]u16 align(1) = undefined,
 };
 
 /// @brief The general structure of the data block is similar to that of the
@@ -1816,98 +1820,14 @@ pub const SmbData = extern struct {
     /// SMB_Parameters.Words field is unaligned and the SMB_Data.ByteCount field
     /// is two bytes in size, the first byte of SMB_Data.Bytes is also
     /// unaligned.
-    bytes_count: u16 = 0,
+    bytes_count: u16 align(1) = 0x0000,
 
     /// @brief The message-specific data structure. The size of this field MUST
     /// be ByteCount bytes. If ByteCount is 0x0000, this field is not included.
     ///
     /// @note Maximum elements : SMB_DATA_MAX_BYTES
-    bytes: ?*[]u8 = null,
+    bytes: [*]u8 align(1) = undefined,
 };
-
-/// @brief Returns a pointer to the begining of the SMB Message Header.
-///
-/// @param M The SMB Message pointer.
-/// @return The begining of the SMB Message Header section.
-// #define SMB_MSG_HEADER(M) ((* SmbMessageHeader)(M))
-
-/// @brief Returns the Parameter address.
-/// @warning Do not cast this as smb_msg_parameter_t, because if the words_count
-/// is 0, the words address is actually the smb_msg_data_t address.
-/// @param M The SMB Message pointer.
-/// @return The Parameter address.
-// #define SMB_MSG_PARAMETER(M) ((M) + sizeof(smb_message_header_t))
-
-/// @brief Returns the Parameter.WordsCount value.
-///
-/// @param M The SMB Message pointer.
-/// @return The Parameter.WordsCount value.
-// #define SMB_MSG_PARAMETER_WORDS_COUNT(M)///(u8///)SMB_MSG_PARAMETER(M)
-
-/// @brief Returns a pointer to the begining of the SMB Message Parameter.Words
-/// array.
-///
-/// @param M The SMB Message pointer.
-/// @return The begining of the SMB Message Parameter.Words array.
-// #define SMB_MSG_PARAMETER_WORDS(M) \
-// (u16///)(SMB_MSG_PARAMETER(M) + sizeof(u8))
-
-/// @brief Returns the Data address.
-/// @warning Do not cast this as smb_msg_data_t, because if the bytes_count
-/// is 0, the bytes address can be random junk causing crash if accessed.
-/// @param M The SMB Message pointer.
-/// @return The Data address.
-// #define SMB_MSG_DATA(M)                            \
-// (u8///)((void///)SMB_MSG_PARAMETER_WORDS(M) + \
-//   sizeof(u16)/// SMB_MSG_PARAMETER_WORDS_COUNT(M))
-
-/// @brief Returns the Data.BytesCount value.
-///
-/// @param M The SMB Message pointer.
-/// @return The Data.BytesCount value.
-// #define SMB_MSG_DATA_BYTES_COUNT(M)///(u16///)SMB_MSG_DATA(M)
-
-/// @brief Returns a pointer to the begining of the SMB Message Data.Bytes
-/// array.
-///
-/// @param M The SMB Message pointer.
-/// @return The begining of the SMB Message Data.Bytes array.
-// #define SMB_MSG_DATA_BYTES(M) SMB_MSG_DATA(M) + sizeof(u16)
-
-/// @brief Returns the total bytes the SMB Message occupies in memory.
-///
-/// @param M The SMB Message pointer.
-/// @return The total bytes the SMB Message occupies in memory.
-// #define SMB_MSG_SIZE(M)                                                    \
-// (sizeof(smb_message_header_t) +                                        \
-//  sizeof(u8) + (sizeof(u16)/// SMB_MSG_PARAMETER_WORDS_COUNT(M)) + \
-//  sizeof(u16) + (sizeof(u8)/// SMB_MSG_DATA_BYTES_COUNT(M)))
-
-/// @brief Allocates a read-to-use SMB Message object.
-///
-/// @param parameter_words_count The number of words to be stored in the
-/// smb_message_parameter_t.words array. If this value is non-zero, the words
-/// array will be allocated. If not, it remains a NULL pointer. The words count
-/// member will be set accordingly.
-/// @param data_bytes_count The number of bytes to be stored in the
-/// smb_message_data_t.bytes array. If this value is non-zero, the bytes array
-/// will be allocated. If not, it remains a NULL pointer. The bytes count
-/// member will be set accordingly.
-// smb_message_t smb_message_ctor(
-//     u8 parameter_words_count,
-//     u16 data_bytes_count);
-
-/// @brief This function decodes raw bytes into an actual SMB Message.
-///
-/// @param raw_bytes The raw bytes to decode.
-/// @return The allocated message on success, NULL otherwise.
-// smb_message_t smb_message_decode(const void///raw_bytes);
-
-/// @brief Deallocates an SMB Message, and it's Parameter words / Data bytes if
-/// they were allocated.
-///
-/// @param msg The SMB Message to deallocate.
-// void smb_message_dtor(smb_message_t msg);
 
 /// @brief Batched messages using the AndX construct were introduced in the LAN
 /// Manager 1.0 dialect. Batched messages reduce the number of messages required
@@ -1928,16 +1848,16 @@ pub const SmbData = extern struct {
 pub const SmbAndX = extern struct {
     /// @brief The command code associated with the next block pair in the AndX
     /// Chain.
-    andx_command: SmbCom,
+    andx_command: SmbCom align(1),
 
     /// @brief This field is reserved and MUST be 0x00.
-    _andx_reserved: u8,
+    _andx_reserved: u8 align(1) = 0x00,
 
     /// @brief The offset in bytes, relative to the start of the SMB Header, of
     /// the next Parameter block in the AndX Message. This offset is independent
     /// of any other size parameters or offsets within the command. This offset
     /// can point to a location past the end of the current block pair.
-    andx_offset: u16,
+    andx_offset: u16 align(1),
 };
 
 /// @brief A 16-bit field for encoding the requested access mode. See section
@@ -2027,81 +1947,76 @@ pub const SmbMessage = struct {
 
     allocator: std.mem.Allocator,
 
-    pub fn deserialize(allocator: std.mem.Allocator, bytes: []const u8) !*SmbMessage {
-        const message = try allocator.create(SmbMessage);
-        errdefer _ = allocator.destroy(message);
-        message.allocator = allocator;
-
-        var offset: u32 = 0;
-
-        // Get the SMB_Header :
-        message.header = std.mem.bytesAsValue(SmbMessageHeader, bytes[0..32]).*;
-        offset += 32;
-
-        // Get the SMB_Parameters :
-        message.parameters.words_count = std.mem.bytesAsValue(u8, bytes[offset..(offset + 1)]).*;
-        offset += 1;
-        if (message.parameters.words_count > 0) {
-            var parametersWords = try allocator.alloc(u16, message.parameters.words_count);
-            message.parameters.words = &parametersWords;
-            errdefer _ = allocator.free(message.parameters.words.?);
-
-            const slice = bytes[offset..][0..(message.parameters.words_count * 2)];
-            const parametersChunk = @as([]const u16, @alignCast(std.mem.bytesAsSlice(u16, slice)));
-            std.mem.copyForwards(u16, message.parameters.words.?.*, parametersChunk);
-
-            offset += message.parameters.words_count * 2;
-        }
-
-        // Get the SMB_Data :
-        message.data.bytes_count = std.mem.bytesAsValue(u16, bytes[offset..][0..2]).*;
-        offset += 2;
-        if (message.data.bytes_count > 0) {
-            var dataBytes = try allocator.alloc(u8, message.data.bytes_count);
-            message.data.bytes = &dataBytes;
-            errdefer _ = allocator.free(message.data.bytes.?);
-
-            const slice = bytes[offset..][0..message.data.bytes_count];
-            const dataChunk = std.mem.bytesAsSlice(u8, slice);
-            std.mem.copyForwards(u8, message.data.bytes.?.*, dataChunk);
-
-            offset += message.data.bytes_count;
-        }
-        return message;
+    pub fn init(allocator: std.mem.Allocator) SmbMessage {
+        return .{
+            .header = .{},
+            .allocator = allocator,
+        };
     }
 
-    pub fn serialize(self: *const SmbMessage, allocator: std.mem.Allocator) ![]u8 {
-        var offset: u64 = 0;
-        const totalSize: u64 = 32 + self.parameters.words_count * 2 + self.data.bytes_count;
+    pub fn create(allocator: std.mem.Allocator) !*SmbMessage {
+        const smb_message = try allocator.create(SmbMessage);
+        errdefer allocator.destroy(smb_message);
 
-        const bytes: []u8 = try allocator.alloc(u8, totalSize);
-        errdefer _ = allocator.free(bytes);
-
-        const struct_bytes = std.mem.asBytes(&self.header);
-        std.mem.copyForwards(u8, bytes, struct_bytes);
-        offset += 32;
-
-        if (self.parameters.words_count > 0) {
-            const parameterWordsBytes = std.mem.bytesAsSlice(u8, self.parameters.words.?);
-            @memcpy(bytes[offset..], parameterWordsBytes);
-            offset += self.parameters.words_count;
-        }
-
-        if (self.data.bytes_count > 0) {
-            @memcpy(bytes[offset..], self.data.bytes.?);
-            offset += self.data.bytes_count;
-        }
-
-        std.debug.assert(offset == totalSize);
-
-        return bytes;
+        smb_message.* = SmbMessage.init(allocator);
+        return smb_message;
     }
 
     pub fn destroy(self: *SmbMessage) void {
         if (self.parameters.words_count > 0)
-            self.allocator.free(self.parameters.words.?.*);
+            self.allocator.free(self.parameters.words[0..self.parameters.words_count]);
         if (self.data.bytes_count > 0)
-            self.allocator.free(self.data.bytes.?.*);
+            self.allocator.free(self.data.bytes[0..self.data.bytes_count]);
         self.allocator.destroy(self);
+    }
+
+    pub fn debugHeader(self: *const SmbMessage) void {
+        var offset: usize = 0;
+        inline for (@typeInfo(SmbMessageHeader).@"struct".fields) |field| {
+            const fieldData = @field(self.header, field.name);
+            const fieldSize = @sizeOf(@TypeOf(fieldData));
+            std.debug.print("{s}: {any} (from byte {d} to byte {d}, {d} bytes)\n", .{ field.name, @field(self.header, field.name), offset, offset + fieldSize - 1, fieldSize });
+            offset += fieldSize;
+        }
+    }
+
+    pub fn deserialize(self: *SmbMessage, bytes: []const u8) !void {
+        var offset: usize = 0;
+
+        self.header = std.mem.bytesToValue(SmbMessageHeader, bytes[offset..][0..32]);
+        offset += 32;
+
+        self.parameters.words_count = std.mem.bytesToValue(u8, bytes[offset..][0..1]);
+        offset += 1;
+        if (self.parameters.words_count > 0) {
+            const parameters_words = try self.allocator.alloc(u16, self.parameters.words_count);
+            errdefer self.allocator.free(parameters_words);
+
+            const slice = bytes[offset..][0 .. self.parameters.words_count * 2];
+
+            for (parameters_words, 0..) |*word, i| {
+                const byte_pair = slice[i * 2 ..][0..2];
+                word.* = std.mem.readInt(u16, byte_pair, .little);
+            }
+
+            self.parameters.words = @ptrCast(parameters_words);
+            offset += self.parameters.words_count * 2;
+        }
+
+        self.data.bytes_count = std.mem.bytesToValue(u16, bytes[offset..][0..2]);
+        offset += 2;
+        if (self.data.bytes_count > 0) {
+            const data_bytes = try self.allocator.alloc(u8, self.data.bytes_count);
+            errdefer self.allocator.free(data_bytes);
+
+            const slice = bytes[offset..][0..self.data.bytes_count];
+
+            for (data_bytes, 0..) |*byte, i| {
+                byte.* = slice[i];
+            }
+
+            self.data.bytes = @ptrCast(data_bytes);
+            offset += self.data.bytes_count * 2;
+        }
     }
 };
