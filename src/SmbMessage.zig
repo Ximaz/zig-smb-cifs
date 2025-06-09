@@ -1948,7 +1948,7 @@ data: SmbData = .{},
 
 allocator: std.mem.Allocator,
 
-pub fn init(allocator: std.mem.Allocator) SmbMessage {
+fn init(allocator: std.mem.Allocator) SmbMessage {
     return .{
         .header = .{},
         .allocator = allocator,
@@ -2019,4 +2019,88 @@ pub fn deserialize(self: *SmbMessage, bytes: []const u8) !void {
         self.data.bytes = @ptrCast(data_bytes);
         offset += self.data.bytes_count * 2;
     }
+}
+
+test "SmbMessage.deserialize" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const bytes = [_]u8{ 255, 83, 77, 66, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 0, 6, 0, 4, 102, 105, 108, 101, 0 };
+
+    const message = try SmbMessage.create(allocator);
+    defer message.destroy();
+
+    try message.deserialize(&bytes);
+    try std.testing.expect(std.mem.eql(u8, &message.header.protocol, &[4]u8{ 255, 83, 77, 66 }));
+    try std.testing.expect(message.header.command == .SMB_COM_CREATE);
+    try std.testing.expect(message.header.status == 0);
+    try std.testing.expect(message.header.flags == .SMB_FLAGS_NONE);
+    try std.testing.expect(message.header.flags2 == .SMB_FLAGS2_NONE);
+    try std.testing.expect(message.header.pid_high == 0);
+    try std.testing.expect(std.mem.eql(u8, &message.header.security_features, &[8]u8{ 0, 0, 0, 0, 0, 0, 0, 0 }));
+    try std.testing.expect(message.header.reserved == 0);
+    try std.testing.expect(message.header.tid == 2);
+    try std.testing.expect(message.header.pid_low == 0);
+    try std.testing.expect(message.header.uid == 1);
+    try std.testing.expect(message.header.mid == 0);
+}
+
+pub fn serialize(self: *const SmbMessage) ![]u8 {
+    const totalSize = 32 + 1 + self.parameters.words_count * 2 + 2 + self.data.bytes_count;
+    const bytes: []u8 = try self.allocator.alloc(u8, totalSize);
+    errdefer self.allocator.free(bytes);
+    var offset: usize = 32;
+
+    const headerBytes: *const [32]u8 = std.mem.asBytes(&self.header);
+    std.mem.copyForwards(u8, bytes, headerBytes);
+
+    std.mem.writeInt(u8, @ptrCast(bytes[offset..]), self.parameters.words_count, .little);
+    offset += 1;
+    if (self.parameters.words_count > 0) {
+        for (0..self.parameters.words_count) |word_index| {
+            const word = self.parameters.words[word_index];
+            std.mem.writeInt(u16, @ptrCast(bytes[offset..][word_index * 2 ..]), word, .little);
+        }
+        offset += self.parameters.words_count * 2;
+    }
+
+    std.mem.writeInt(u16, bytes[offset..][0..2], self.data.bytes_count, .little);
+    offset += 2;
+    if (self.data.bytes_count > 0) {
+        std.mem.copyForwards(u8, bytes[offset..], self.data.bytes[0..self.data.bytes_count]);
+        offset += self.data.bytes_count;
+    }
+
+    return bytes;
+}
+
+test "SmbMessage.serialize" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const expectedBytes = [_]u8{ 255, 83, 77, 66, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 0, 6, 0, 4, 102, 105, 108, 101, 0 };
+
+    const message = try SmbMessage.create(allocator);
+    defer message.destroy();
+
+    try message.deserialize(&expectedBytes);
+    try std.testing.expect(std.mem.eql(u8, &message.header.protocol, &[4]u8{ 255, 83, 77, 66 }));
+    try std.testing.expect(message.header.command == .SMB_COM_CREATE);
+    try std.testing.expect(message.header.status == 0);
+    try std.testing.expect(message.header.flags == .SMB_FLAGS_NONE);
+    try std.testing.expect(message.header.flags2 == .SMB_FLAGS2_NONE);
+    try std.testing.expect(message.header.pid_high == 0);
+    try std.testing.expect(std.mem.eql(u8, &message.header.security_features, &[8]u8{ 0, 0, 0, 0, 0, 0, 0, 0 }));
+    try std.testing.expect(message.header.reserved == 0);
+    try std.testing.expect(message.header.tid == 2);
+    try std.testing.expect(message.header.pid_low == 0);
+    try std.testing.expect(message.header.uid == 1);
+    try std.testing.expect(message.header.mid == 0);
+
+    const serializedBytes = try message.serialize();
+    defer message.allocator.free(serializedBytes);
+
+    try std.testing.expect(std.mem.eql(u8, &expectedBytes, serializedBytes));
 }
