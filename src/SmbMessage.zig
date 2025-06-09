@@ -1,3 +1,23 @@
+//! @brief SMB Messages are divisible into three parts:
+//! - A fixed-length header
+//! - A variable length parameter block
+//! - A variable length data block
+//! The header identifies the message as an SMB message, specifies the command
+//! to be executed, and provides context. In a response message, the header
+//! also includes status information that indicates whether (and how) the
+//! command succeeded or failed.
+//!
+//! The parameter block is a short array of two-byte values (words), while the
+//! data block is an array of up to 64 KB in size. The structure and contents
+//! of these blocks are specific to each SMB message.
+//!
+//! SMB messages are structured this way because the protocol was originally
+//! conceived of as a rudimentary remote procedure call system. The parameter
+//! values were meant to represent the parameters passed into a function. The
+//! data section would contain larger structures or data buffers, such as the
+//! block of data to be written using an SMB_COM_WRITE command. Although the
+//! protocol has evolved over time, this differentiation has been generally
+//! maintained.
 const std = @import("std");
 
 // CONSTANTS
@@ -1915,108 +1935,88 @@ pub const SmbAccessMode = enum(u16) {
     WRITETHROUGH_MODE_WRITETHROUGH = (0x01 << 14),
 };
 
-/// @brief SMB Messages are divisible into three parts:
-/// - A fixed-length header
-/// - A variable length parameter block
-/// - A variable length data block
-/// The header identifies the message as an SMB message, specifies the command
-/// to be executed, and provides context. In a response message, the header
-/// also includes status information that indicates whether (and how) the
-/// command succeeded or failed.
-///
-/// The parameter block is a short array of two-byte values (words), while the
-/// data block is an array of up to 64 KB in size. The structure and contents
-/// of these blocks are specific to each SMB message.
-///
-/// SMB messages are structured this way because the protocol was originally
-/// conceived of as a rudimentary remote procedure call system. The parameter
-/// values were meant to represent the parameters passed into a function. The
-/// data section would contain larger structures or data buffers, such as the
-/// block of data to be written using an SMB_COM_WRITE command. Although the
-/// protocol has evolved over time, this differentiation has been generally
-/// maintained.
-pub const SmbMessage = struct {
-    /// @brief The SMB_Header structure is a fixed 32-bytes in length.
-    header: SmbMessageHeader,
+const SmbMessage = @This();
 
-    /// @brief The SMB_Parameters structure has a variable length.
-    parameters: SmbParameters = .{},
+/// @brief The SMB_Header structure is a fixed 32-bytes in length.
+header: SmbMessageHeader,
 
-    /// @brief The SMB_Data structure has a variable length.
-    data: SmbData = .{},
+/// @brief The SMB_Parameters structure has a variable length.
+parameters: SmbParameters = .{},
 
-    allocator: std.mem.Allocator,
+/// @brief The SMB_Data structure has a variable length.
+data: SmbData = .{},
 
-    pub fn init(allocator: std.mem.Allocator) SmbMessage {
-        return .{
-            .header = .{},
-            .allocator = allocator,
-        };
+allocator: std.mem.Allocator,
+
+pub fn init(allocator: std.mem.Allocator) SmbMessage {
+    return .{
+        .header = .{},
+        .allocator = allocator,
+    };
+}
+
+pub fn create(allocator: std.mem.Allocator) !*SmbMessage {
+    const smb_message = try allocator.create(SmbMessage);
+    errdefer allocator.destroy(smb_message);
+
+    smb_message.* = SmbMessage.init(allocator);
+    return smb_message;
+}
+
+pub fn destroy(self: *SmbMessage) void {
+    if (self.parameters.words_count > 0)
+        self.allocator.free(self.parameters.words[0..self.parameters.words_count]);
+    if (self.data.bytes_count > 0)
+        self.allocator.free(self.data.bytes[0..self.data.bytes_count]);
+    self.allocator.destroy(self);
+}
+
+pub fn debugHeader(self: *const SmbMessage) void {
+    var offset: usize = 0;
+    inline for (@typeInfo(SmbMessageHeader).@"struct".fields) |field| {
+        const fieldData = @field(self.header, field.name);
+        const fieldSize = @sizeOf(@TypeOf(fieldData));
+        std.debug.print("{s}: {any} (from byte {d} to byte {d}, {d} bytes)\n", .{ field.name, @field(self.header, field.name), offset, offset + fieldSize - 1, fieldSize });
+        offset += fieldSize;
     }
+}
 
-    pub fn create(allocator: std.mem.Allocator) !*SmbMessage {
-        const smb_message = try allocator.create(SmbMessage);
-        errdefer allocator.destroy(smb_message);
+pub fn deserialize(self: *SmbMessage, bytes: []const u8) !void {
+    var offset: usize = 0;
 
-        smb_message.* = SmbMessage.init(allocator);
-        return smb_message;
-    }
+    self.header = std.mem.bytesToValue(SmbMessageHeader, bytes[offset..][0..32]);
+    offset += 32;
 
-    pub fn destroy(self: *SmbMessage) void {
-        if (self.parameters.words_count > 0)
-            self.allocator.free(self.parameters.words[0..self.parameters.words_count]);
-        if (self.data.bytes_count > 0)
-            self.allocator.free(self.data.bytes[0..self.data.bytes_count]);
-        self.allocator.destroy(self);
-    }
+    self.parameters.words_count = bytes[offset];
+    offset += 1;
+    if (self.parameters.words_count > 0) {
+        const parameters_words = try self.allocator.alloc(u16, self.parameters.words_count);
+        errdefer self.allocator.free(parameters_words);
 
-    pub fn debugHeader(self: *const SmbMessage) void {
-        var offset: usize = 0;
-        inline for (@typeInfo(SmbMessageHeader).@"struct".fields) |field| {
-            const fieldData = @field(self.header, field.name);
-            const fieldSize = @sizeOf(@TypeOf(fieldData));
-            std.debug.print("{s}: {any} (from byte {d} to byte {d}, {d} bytes)\n", .{ field.name, @field(self.header, field.name), offset, offset + fieldSize - 1, fieldSize });
-            offset += fieldSize;
-        }
-    }
+        const slice = bytes[offset..][0 .. self.parameters.words_count * 2];
 
-    pub fn deserialize(self: *SmbMessage, bytes: []const u8) !void {
-        var offset: usize = 0;
-
-        self.header = std.mem.bytesToValue(SmbMessageHeader, bytes[offset..][0..32]);
-        offset += 32;
-
-        self.parameters.words_count = std.mem.bytesToValue(u8, bytes[offset]);
-        offset += 1;
-        if (self.parameters.words_count > 0) {
-            const parameters_words = try self.allocator.alloc(u16, self.parameters.words_count);
-            errdefer self.allocator.free(parameters_words);
-
-            const slice = bytes[offset..][0 .. self.parameters.words_count * 2];
-
-            for (parameters_words, 0..) |*word, i| {
-                const byte_pair = slice[i * 2 ..][0..2];
-                word.* = std.mem.readInt(u16, byte_pair, .little);
-            }
-
-            self.parameters.words = @ptrCast(parameters_words);
-            offset += self.parameters.words_count * 2;
+        for (parameters_words, 0..) |*word, i| {
+            const byte_pair = slice[i * 2 ..][0..2];
+            word.* = std.mem.readInt(u16, byte_pair, .little);
         }
 
-        self.data.bytes_count = std.mem.bytesToValue(u16, bytes[offset..][0..2]);
-        offset += 2;
-        if (self.data.bytes_count > 0) {
-            const data_bytes = try self.allocator.alloc(u8, self.data.bytes_count);
-            errdefer self.allocator.free(data_bytes);
-
-            const slice = bytes[offset..][0..self.data.bytes_count];
-
-            for (data_bytes, 0..) |*byte, i| {
-                byte.* = slice[i];
-            }
-
-            self.data.bytes = @ptrCast(data_bytes);
-            offset += self.data.bytes_count * 2;
-        }
+        self.parameters.words = @ptrCast(parameters_words);
+        offset += self.parameters.words_count * 2;
     }
-};
+
+    self.data.bytes_count = std.mem.bytesToValue(u16, bytes[offset..][0..2]);
+    offset += 2;
+    if (self.data.bytes_count > 0) {
+        const data_bytes = try self.allocator.alloc(u8, self.data.bytes_count);
+        errdefer self.allocator.free(data_bytes);
+
+        const slice = bytes[offset..][0..self.data.bytes_count];
+
+        for (data_bytes, 0..) |*byte, i| {
+            byte.* = slice[i];
+        }
+
+        self.data.bytes = @ptrCast(data_bytes);
+        offset += self.data.bytes_count * 2;
+    }
+}

@@ -23,7 +23,7 @@ pub fn main() !void {
     const rawBytes = buffer[0..bufferLength];
     std.debug.print("{any}\n", .{rawBytes});
 
-    const message = try lib.smb_cifs.SmbMessage.create(allocator);
+    const message = try lib.SmbMessage.create(allocator);
     defer message.destroy();
 
     try message.deserialize(rawBytes);
