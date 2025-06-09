@@ -737,54 +737,11 @@ pub const SmbErrorCode = enum(u16) {
     /// within the specified Change Notify response buffer.
     ERRDOS_NOTIFY_ENUM_DIR = 0x03FE,
 
-    /// @brief Unspecified server error.
-    ERRSRV_ERROR = 0x0001,
-
-    /// @brief Invalid password.
-    ERRSRV_BAD_PW = 0x0002,
-
-    /// @brief DFS pathname not on local server.
-    ERRSRV_BAD_PATH = 0x0003,
-
-    /// @brief Access denied. The specified UID does not have permission to
-    /// execute the requested command within the current context (TID).
-    ERRSRV_ACCESS = 0x0004,
-
-    /// @brief The TID specified in the command was invalid. Earlier
-    /// documentation, with the exception of [SNIA], refers to this error code
-    /// as ERRinvnid (Invalid Network Path Identifier). [SNIA] uses both names.
-    ERRSRV_INV_TID = 0x0005,
-
-    /// @brief Invalid server name in Tree Connect.
-    ERRSRV_INV_NET_NAME = 0x0006,
-
-    /// @brief A printer request was made to a non-printer device or,
-    /// conversely, a non-printer request was made to a printer device.
-    ERRSRV_INV_DEVICE = 0x0007,
-
-    /// @brief Invalid Connection ID (CID). This error code is only defined when
-    /// the Direct IPX connectionless transport is in use.
-    ERRSRV_INV_SESSION = 0x0010,
-
-    /// @brief A command with matching MID or SequenceNumber is currently being
-    /// processed. This error code is defined only when the Direct IPX
-    /// connectionless transport is in use.
-    ERRSRV_WORKING = 0x0011,
-
-    /// @brief Incorrect NetBIOS Called Name when starting an SMB session over
-    /// Direct IPX. This error code is only defined when the Direct IPX
-    /// connectionless transport is in use.
-    ERRSRV_NOT_ME = 0x0012,
-
     /// @brief An unknown SMB command code was received by the server.
     ERRSRV_BAD_CMD = 0x0016,
 
     /// @brief Print queue is full - too many queued items.
     ERRSRV_QUEUE_FULL = 0x0031,
-
-    /// @brief Print queue is full - no space for queued item, or queued item
-    /// too big.
-    ERRSRV_QUEUE_TOO_BIG = 0x0032,
 
     /// @brief End Of File on print queue dump.
     ERRSRV_QUEUE_EOF = 0x0033,
@@ -820,9 +777,6 @@ pub const SmbErrorCode = enum(u16) {
     /// @brief The UID specified is not known as a valid ID on this server
     /// session.
     ERRSRV_BAD_UID = 0x005B,
-
-    /// @brief Write to a named pipe with no reader.
-    ERRSRV_NOT_CONNECTED = 0x00E9,
 
     /// @brief Temporarily unable to support RAW mode transfers. Use MPX mode.
     ERRSRV_USE_MPX = 0x00FA,
@@ -860,9 +814,6 @@ pub const SmbErrorCode = enum(u16) {
     /// @brief Drive not ready.
     ERRHDR_NOT_READY = 0x0015,
 
-    /// @brief Unknown command.
-    ERRHDR_BAD_CMD = 0x0016,
-
     /// @brief Data error (incorrect CRC).
     ERRHDR_DATA = 0x0017,
 
@@ -887,16 +838,6 @@ pub const SmbErrorCode = enum(u16) {
     /// @brief Read fault.
     ERRHDR_READ = 0x001E,
 
-    /// @brief General hardware failure.
-    ERRHDR_GENERAL = 0x001F,
-
-    /// @brief An attempted open operation conflicts with an existing open.
-    ERRHDR_BAD_SHARE = 0x0020,
-
-    /// @brief A lock request specified an invalid locking mode, or conflicted
-    /// with an existing file lock.
-    ERRHDR_LOCK = 0x0021,
-
     /// @brief The wrong disk was found in a drive.
     ERRHDR_WRONG_DISK = 0x0022,
 
@@ -909,6 +850,65 @@ pub const SmbErrorCode = enum(u16) {
 
     /// @brief No space on file system.
     ERRHDR_DISK_FULL = 0x0027,
+
+    /// @brief Unspecified server error.
+    pub const ERRSRV_ERROR: SmbErrorCode = .ERRDOS_BAD_FUNC;
+
+    /// @brief Invalid password.
+    pub const ERRSRV_BAD_PW: SmbErrorCode = .ERRDOS_BAD_FILE;
+
+    /// @brief DFS pathname not on local server.
+    pub const ERRSRV_BAD_PATH: SmbErrorCode = .ERRDOS_BAD_PATH;
+
+    /// @brief Access denied. The specified UID does not have permission to
+    /// execute the requested command within the current context (TID).
+    pub const ERRSRV_ACCESS: SmbErrorCode = .ERRDOS_NOFIDS;
+
+    /// @brief The TID specified in the command was invalid. Earlier
+    /// documentation, with the exception of [SNIA], refers to this error code
+    /// as ERRinvnid (Invalid Network Path Identifier). [SNIA] uses both names.
+    pub const ERRSRV_INV_TID: SmbErrorCode = .ERRDOS_NOACCESS;
+
+    /// @brief Invalid server name in Tree Connect.
+    pub const ERRSRV_INV_NET_NAME: SmbErrorCode = .ERRDOS_BAD_FID;
+
+    /// @brief A printer request was made to a non-printer device or,
+    /// conversely, a non-printer request was made to a printer device.
+    pub const ERRSRV_INV_DEVICE: SmbErrorCode = .ERRDOS_BAD_MCB;
+
+    /// @brief Invalid Connection ID (CID). This error code is only defined when
+    /// the Direct IPX connectionless transport is in use.
+    pub const ERRSRV_INV_SESSION: SmbErrorCode = .ERRDOS_REMCD;
+
+    /// @brief A command with matching MID or SequenceNumber is currently being
+    /// processed. This error code is defined only when the Direct IPX
+    /// connectionless transport is in use.
+    pub const ERRSRV_WORKING: SmbErrorCode = .ERRDOS_DIFF_DEVICE;
+
+    /// @brief Incorrect NetBIOS Called Name when starting an SMB session over
+    /// Direct IPX. This error code is only defined when the Direct IPX
+    /// connectionless transport is in use.
+    pub const ERRSRV_NOT_ME: SmbErrorCode = .ERRDOS_NO_FILE;
+
+    /// @brief Print queue is full - no space for queued item, or queued item
+    /// too big.
+    pub const ERRSRV_QUEUE_TOO_BIG: SmbErrorCode = .ERRDOS_UNSUP;
+
+    /// @brief Write to a named pipe with no reader.
+    pub const ERRSRV_NOT_CONNECTED: SmbErrorCode = .ERRDOS_NOT_CONNECTED;
+
+    /// @brief Unknown command.
+    pub const ERRHDR_BAD_CMD: SmbErrorCode = .ERRSRV_BAD_CMD;
+
+    /// @brief General hardware failure.
+    pub const ERRHDR_GENERAL: SmbErrorCode = .ERRDOS_GENERAL;
+
+    /// @brief An attempted open operation conflicts with an existing open.
+    pub const ERRHDR_BAD_SHARE: SmbErrorCode = .ERRDOS_BAD_SHARE;
+
+    /// @brief A lock request specified an invalid locking mode, or conflicted
+    /// with an existing file lock.
+    pub const ERRHDR_LOCK: SmbErrorCode = .ERRDOS_LOCK;
 };
 
 /// @brief An SMB_ERROR MUST be interpreted in one of two ways, depending on the
@@ -918,14 +918,14 @@ pub const SmbErrorCode = enum(u16) {
 /// defined following).
 pub const SmbError = extern struct {
     /// @brief An SMB error class code.
-    error_class: SmbErrorClass,
+    error_class: SmbErrorClass = .ERRCLS_SUCCESS,
 
     /// @brief This field is reserved and MUST be ignored by both server and
     /// client.
-    _reserved: u8,
+    _reserved: u8 = 0x00,
 
     /// @brief An SMB error code.
-    error_code: SmbErrorCode,
+    error_code: SmbErrorCode = .ERR_SUCCESS,
 };
 
 /// @brief Following is a listing of all SMB commands used in CIFS and their
@@ -1713,8 +1713,7 @@ pub const SmbFlags2 = enum(u16) {
     /// permission but does have execute permission. This bit field SHOULD be
     /// set to 1 when the negotiated dialect is LANMAN2.0 or later. This flag is
     /// also known as SMB_FLAGS2_READ_IF_EXECUTE.
-    SMB_FLAGS2_PAGING_IO_READ_IF_EXECUTE = (1 << 13),
-    // SMB_FLAGS2_READ_IF_EXECUTE = (1 << 13),
+    SMB_FLAGS2_PAGING_IO = (1 << 13),
 
     /// @brief If this bit is set in a client request, the server MUST return
     /// errors as 32-bit NTSTATUS codes in the response. If it is clear, the
@@ -1732,6 +1731,8 @@ pub const SmbFlags2 = enum(u16) {
     /// of OEM characters. This bit field SHOULD be set to 1 when the negotiated
     /// dialect is NT LANMAN.
     SMB_FLAGS2_UNICODE = (1 << 15),
+
+    pub const SMB_FLAGS2_READ_IF_EXECUTE: SmbFlags2 = .SMB_FLAGS2_PAGING_IO;
 };
 
 /// @brief In the case that security signatures are negotiated :
@@ -1772,7 +1773,7 @@ pub const SmbMessageHeader = extern struct {
 
     /// @brief A 32-bit field used to communicate error messages from the server
     /// to the client.
-    status: i32 align(1) = 0x0000,
+    status: SmbError align(1) = .{},
 
     /// @brief An 8-bit field of 1-bit flags describing various features in
     /// effect for the message.
@@ -1955,6 +1956,22 @@ fn init(allocator: std.mem.Allocator) SmbMessage {
     };
 }
 
+pub fn reserveParameters(self: *SmbMessage, words_count: u8) !void {
+    self.parameters.words_count = words_count;
+    if (self.parameters.words_count > 0) {
+        const parametersWords = try self.allocator.alloc(u16, self.parameters.words_count);
+        self.parameters.words = @ptrCast(parametersWords);
+    }
+}
+
+pub fn reserveData(self: *SmbMessage, bytes_count: u16) !void {
+    self.data.bytes_count = bytes_count;
+    if (self.data.bytes_count > 0) {
+        const dataBytes = try self.allocator.alloc(u8, self.data.bytes_count);
+        self.data.bytes = @ptrCast(dataBytes);
+    }
+}
+
 pub fn create(allocator: std.mem.Allocator) !*SmbMessage {
     const smb_message = try allocator.create(SmbMessage);
     errdefer allocator.destroy(smb_message);
@@ -2034,7 +2051,8 @@ test "SmbMessage.deserialize" {
     try message.deserialize(&bytes);
     try std.testing.expect(std.mem.eql(u8, &message.header.protocol, &[4]u8{ 255, 83, 77, 66 }));
     try std.testing.expect(message.header.command == .SMB_COM_CREATE);
-    try std.testing.expect(message.header.status == 0);
+    try std.testing.expect(message.header.status.error_class == .ERRCLS_SUCCESS);
+    try std.testing.expect(message.header.status.error_code == .ERR_SUCCESS);
     try std.testing.expect(message.header.flags == .SMB_FLAGS_NONE);
     try std.testing.expect(message.header.flags2 == .SMB_FLAGS2_NONE);
     try std.testing.expect(message.header.pid_high == 0);
@@ -2088,7 +2106,8 @@ test "SmbMessage.serialize" {
     try message.deserialize(&expectedBytes);
     try std.testing.expect(std.mem.eql(u8, &message.header.protocol, &[4]u8{ 255, 83, 77, 66 }));
     try std.testing.expect(message.header.command == .SMB_COM_CREATE);
-    try std.testing.expect(message.header.status == 0);
+    try std.testing.expect(message.header.status.error_class == .ERRCLS_SUCCESS);
+    try std.testing.expect(message.header.status.error_code == .ERR_SUCCESS);
     try std.testing.expect(message.header.flags == .SMB_FLAGS_NONE);
     try std.testing.expect(message.header.flags2 == .SMB_FLAGS2_NONE);
     try std.testing.expect(message.header.pid_high == 0);

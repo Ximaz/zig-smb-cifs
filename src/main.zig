@@ -12,24 +12,4 @@ fn readFile(filename: []const u8, output: []u8) !usize {
     return try file.read(output);
 }
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-
-    const allocator = gpa.allocator();
-
-    var buffer: [1024]u8 = undefined;
-    const bufferLength = try readFile("resp.bin", buffer[0..]);
-    const rawBytes = buffer[0..bufferLength];
-    std.debug.print("{any}\n", .{rawBytes});
-
-    const message = try lib.SmbMessage.create(allocator);
-    defer message.destroy();
-
-    try message.deserialize(rawBytes);
-
-    std.debug.print("Header: {any}\n", .{message.*.header});
-    std.debug.print("Parameters: {any}\n", .{message.*.parameters});
-    std.debug.print("Data: {any}\n", .{message.*.data.bytes[0..message.*.data.bytes_count]});
-    message.debugHeader();
-}
+pub fn main() !void {}
