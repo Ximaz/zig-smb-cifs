@@ -6,7 +6,11 @@ pub const SmbCloseRequest = struct {
     fid: SmbMessage.FID,
     last_time_modified: SmbMessage.UTIME,
 
-    pub fn deserialize(allocator: std.mem.Allocator, request: *const SmbCloseRequest) !SmbMessage {
+    pub fn deserialize(request: *const SmbMessage) SmbCloseRequest {
+        return .{ .uid = request.header.uid, .fid = @intCast(request.parameters.words[0]), .last_time_modified = std.mem.readInt(SmbMessage.UTIME, @as(*[4]u8, @alignCast(@ptrCast(&request.parameters.words[1]))), .little) };
+    }
+
+    pub fn serialize(allocator: std.mem.Allocator, request: *const SmbCloseRequest) !SmbMessage {
         var smbMessage = SmbMessage{ .header = .{ .uid = request.uid, .command = .SMB_COM_CLOSE } };
         errdefer smbMessage.deinit(allocator);
 
@@ -16,24 +20,20 @@ pub const SmbCloseRequest = struct {
 
         return smbMessage;
     }
-
-    pub fn serialize(request: *const SmbMessage) SmbCloseRequest {
-        return .{ .uid = request.header.uid, .fid = @intCast(request.parameters.words[0]), .last_time_modified = std.mem.readInt(SmbMessage.UTIME, @as(*[4]u8, @alignCast(@ptrCast(&request.parameters.words[1]))), .little) };
-    }
 };
 
 pub const SmbCloseResponse = struct {
     error_status: SmbMessage.SmbError,
 
-    pub fn deserialize(response: *const SmbCloseResponse) SmbMessage {
+    pub fn deserialize(response: *const SmbMessage) SmbCloseResponse {
+        return .{ .error_status = response.header.status };
+    }
+
+    pub fn serialize(response: *const SmbCloseResponse) SmbMessage {
         return .{ .header = .{
             .command = .SMB_COM_CLOSE,
             .status = response.error_status,
         } };
-    }
-
-    pub fn serialize(response: *const SmbMessage) SmbCloseResponse {
-        return .{ .error_status = response.header.status };
     }
 };
 
@@ -44,10 +44,10 @@ test "SmbCloseRequest" {
 
     const allocator = gpa.allocator();
 
-    var message = try SmbCloseRequest.deserialize(allocator, &request);
+    var message = try SmbCloseRequest.serialize(allocator, &request);
     defer message.deinit(allocator);
 
-    const requestMessage = SmbCloseRequest.serialize(&message);
+    const requestMessage = SmbCloseRequest.deserialize(&message);
     try std.testing.expect(request.uid == requestMessage.uid);
     try std.testing.expect(request.fid == requestMessage.fid);
     try std.testing.expect(request.last_time_modified == requestMessage.last_time_modified);
@@ -59,9 +59,9 @@ test "SmbCloseReponse" {
         .error_code = .ERRDOS_BAD_FID,
     } };
 
-    const message = SmbCloseResponse.deserialize(&response);
+    const message = SmbCloseResponse.serialize(&response);
 
-    const responseMessage = SmbCloseResponse.serialize(&message);
+    const responseMessage = SmbCloseResponse.deserialize(&message);
     try std.testing.expect(response.error_status.error_class == responseMessage.error_status.error_class);
     try std.testing.expect(response.error_status.error_code == responseMessage.error_status.error_code);
 }

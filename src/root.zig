@@ -5,6 +5,7 @@ const std = @import("std");
 const testing = std.testing;
 pub const SmbMessage = @import("SmbMessage.zig");
 pub const SmbClose = @import("SmbClose.zig");
+pub const SmbCreate = @import("SmbCreate.zig");
 
 test {
     _ = std.testing.refAllDecls(@This());
