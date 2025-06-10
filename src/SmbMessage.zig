@@ -1939,7 +1939,7 @@ pub const SmbAccessMode = enum(u16) {
 const SmbMessage = @This();
 
 /// @brief The SMB_Header structure is a fixed 32-bytes in length.
-header: SmbMessageHeader,
+header: SmbMessageHeader = .{},
 
 /// @brief The SMB_Parameters structure has a variable length.
 parameters: SmbParameters = .{},
@@ -1947,45 +1947,27 @@ parameters: SmbParameters = .{},
 /// @brief The SMB_Data structure has a variable length.
 data: SmbData = .{},
 
-allocator: std.mem.Allocator,
-
-fn init(allocator: std.mem.Allocator) SmbMessage {
-    return .{
-        .header = .{},
-        .allocator = allocator,
-    };
-}
-
-pub fn reserveParameters(self: *SmbMessage, words_count: u8) !void {
+pub fn reserveParameters(self: *SmbMessage, allocator: std.mem.Allocator, words_count: u8) !void {
     self.parameters.words_count = words_count;
     if (self.parameters.words_count > 0) {
-        const parametersWords = try self.allocator.alloc(u16, self.parameters.words_count);
+        const parametersWords = try allocator.alloc(u16, self.parameters.words_count);
         self.parameters.words = @ptrCast(parametersWords);
     }
 }
 
-pub fn reserveData(self: *SmbMessage, bytes_count: u16) !void {
+pub fn reserveData(self: *SmbMessage, allocator: std.mem.Allocator, bytes_count: u16) !void {
     self.data.bytes_count = bytes_count;
     if (self.data.bytes_count > 0) {
-        const dataBytes = try self.allocator.alloc(u8, self.data.bytes_count);
+        const dataBytes = try allocator.alloc(u8, self.data.bytes_count);
         self.data.bytes = @ptrCast(dataBytes);
     }
 }
 
-pub fn create(allocator: std.mem.Allocator) !*SmbMessage {
-    const smb_message = try allocator.create(SmbMessage);
-    errdefer allocator.destroy(smb_message);
-
-    smb_message.* = SmbMessage.init(allocator);
-    return smb_message;
-}
-
-pub fn destroy(self: *SmbMessage) void {
+pub fn deinit(self: *SmbMessage, allocator: std.mem.Allocator) void {
     if (self.parameters.words_count > 0)
-        self.allocator.free(self.parameters.words[0..self.parameters.words_count]);
+        allocator.free(self.parameters.words[0..self.parameters.words_count]);
     if (self.data.bytes_count > 0)
-        self.allocator.free(self.data.bytes[0..self.data.bytes_count]);
-    self.allocator.destroy(self);
+        allocator.free(self.data.bytes[0..self.data.bytes_count]);
 }
 
 pub fn debugHeader(self: *const SmbMessage) void {
@@ -1998,7 +1980,7 @@ pub fn debugHeader(self: *const SmbMessage) void {
     }
 }
 
-pub fn deserialize(self: *SmbMessage, bytes: []const u8) !void {
+pub fn deserialize(self: *SmbMessage, allocator: std.mem.Allocator, bytes: []const u8) !void {
     var offset: usize = 0;
 
     self.header = std.mem.bytesToValue(SmbMessageHeader, bytes[offset..][0..32]);
@@ -2007,8 +1989,8 @@ pub fn deserialize(self: *SmbMessage, bytes: []const u8) !void {
     self.parameters.words_count = bytes[offset];
     offset += 1;
     if (self.parameters.words_count > 0) {
-        const parameters_words = try self.allocator.alloc(u16, self.parameters.words_count);
-        errdefer self.allocator.free(parameters_words);
+        const parameters_words = try allocator.alloc(u16, self.parameters.words_count);
+        errdefer allocator.free(parameters_words);
 
         const slice = bytes[offset..][0 .. self.parameters.words_count * 2];
 
@@ -2024,8 +2006,8 @@ pub fn deserialize(self: *SmbMessage, bytes: []const u8) !void {
     self.data.bytes_count = std.mem.bytesToValue(u16, bytes[offset..][0..2]);
     offset += 2;
     if (self.data.bytes_count > 0) {
-        const data_bytes = try self.allocator.alloc(u8, self.data.bytes_count);
-        errdefer self.allocator.free(data_bytes);
+        const data_bytes = try allocator.alloc(u8, self.data.bytes_count);
+        errdefer allocator.free(data_bytes);
 
         const slice = bytes[offset..][0..self.data.bytes_count];
 
@@ -2045,10 +2027,10 @@ test "SmbMessage.deserialize" {
 
     const bytes = [_]u8{ 255, 83, 77, 66, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 0, 6, 0, 4, 102, 105, 108, 101, 0 };
 
-    const message = try SmbMessage.create(allocator);
-    defer message.destroy();
+    var message = SmbMessage{};
+    defer message.deinit(allocator);
 
-    try message.deserialize(&bytes);
+    try message.deserialize(allocator, &bytes);
     try std.testing.expect(std.mem.eql(u8, &message.header.protocol, &[4]u8{ 255, 83, 77, 66 }));
     try std.testing.expect(message.header.command == .SMB_COM_CREATE);
     try std.testing.expect(message.header.status.error_class == .ERRCLS_SUCCESS);
@@ -2064,10 +2046,10 @@ test "SmbMessage.deserialize" {
     try std.testing.expect(message.header.mid == 0);
 }
 
-pub fn serialize(self: *const SmbMessage) ![]u8 {
+pub fn serialize(self: *const SmbMessage, allocator: std.mem.Allocator) ![]u8 {
     const totalSize = 32 + 1 + self.parameters.words_count * 2 + 2 + self.data.bytes_count;
-    const bytes: []u8 = try self.allocator.alloc(u8, totalSize);
-    errdefer self.allocator.free(bytes);
+    const bytes: []u8 = try allocator.alloc(u8, totalSize);
+    errdefer allocator.free(bytes);
     var offset: usize = 32;
 
     const headerBytes: *const [32]u8 = std.mem.asBytes(&self.header);
@@ -2100,10 +2082,10 @@ test "SmbMessage.serialize" {
 
     const expectedBytes = [_]u8{ 255, 83, 77, 66, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 0, 6, 0, 4, 102, 105, 108, 101, 0 };
 
-    const message = try SmbMessage.create(allocator);
-    defer message.destroy();
+    var message = SmbMessage{};
+    defer message.deinit(allocator);
 
-    try message.deserialize(&expectedBytes);
+    try message.deserialize(allocator, &expectedBytes);
     try std.testing.expect(std.mem.eql(u8, &message.header.protocol, &[4]u8{ 255, 83, 77, 66 }));
     try std.testing.expect(message.header.command == .SMB_COM_CREATE);
     try std.testing.expect(message.header.status.error_class == .ERRCLS_SUCCESS);
@@ -2118,8 +2100,8 @@ test "SmbMessage.serialize" {
     try std.testing.expect(message.header.uid == 1);
     try std.testing.expect(message.header.mid == 0);
 
-    const serializedBytes = try message.serialize();
-    defer message.allocator.free(serializedBytes);
+    const serializedBytes = try message.serialize(allocator);
+    defer allocator.free(serializedBytes);
 
     try std.testing.expect(std.mem.eql(u8, &expectedBytes, serializedBytes));
 }
