@@ -1947,22 +1947,6 @@ parameters: SmbParameters = .{},
 /// @brief The SMB_Data structure has a variable length.
 data: SmbData = .{},
 
-pub fn reserveParameters(self: *SmbMessage, allocator: std.mem.Allocator, words_count: u8) !void {
-    self.parameters.words_count = words_count;
-    if (self.parameters.words_count > 0) {
-        const parametersWords = try allocator.alloc(u16, self.parameters.words_count);
-        self.parameters.words = @ptrCast(parametersWords);
-    }
-}
-
-pub fn reserveData(self: *SmbMessage, allocator: std.mem.Allocator, bytes_count: u16) !void {
-    self.data.bytes_count = bytes_count;
-    if (self.data.bytes_count > 0) {
-        const dataBytes = try allocator.alloc(u8, self.data.bytes_count);
-        self.data.bytes = @ptrCast(dataBytes);
-    }
-}
-
 pub fn deinit(self: *SmbMessage, allocator: std.mem.Allocator) void {
     if (self.parameters.words_count > 0)
         allocator.free(self.parameters.words[0..self.parameters.words_count]);

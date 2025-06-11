@@ -1,59 +1,74 @@
 const std = @import("std");
 const SmbMessage = @import("SmbMessage.zig");
+const SmbMessageWriter = @import("SmbMessageWriter.zig");
 
 pub const SmbCreateRequest = struct {
-    uid: SmbMessage.UID,
     tid: SmbMessage.TID,
-    pathname: []const u8,
+    uid: SmbMessage.UID,
+
     file_attributes: SmbMessage.SmbFileAttributes,
     creation_time: SmbMessage.UTIME,
 
+    pathname: []const u8,
+
     pub fn deserialize(request: *const SmbMessage) SmbCreateRequest {
+        const tid: SmbMessage.TID = request.header.tid;
+        const uid: SmbMessage.UID = request.header.uid;
+
+        const file_attributes: SmbMessage.SmbFileAttributes = @enumFromInt(request.parameters.words[0]);
+        const creation_time: SmbMessage.UTIME = std.mem.readInt(SmbMessage.UTIME, @ptrCast(request.parameters.words[1..]), .little);
+
         const pathname_length = strlen: {
             var i: u16 = 0;
             while (request.data.bytes[1 + i] != 0) : (i += 1) {}
             break :strlen i;
         };
-        return .{ .uid = request.header.uid, .tid = request.header.tid, .pathname = request.data.bytes[1 .. pathname_length + 1], .file_attributes = @enumFromInt(request.parameters.words[0]), .creation_time = std.mem.readInt(SmbMessage.UTIME, @as(*[4]u8, @alignCast(@ptrCast(&request.parameters.words[1]))), .little) };
+        const pathname: []const u8 = request.data.bytes[1 .. pathname_length + 1];
+
+        return .{ .tid = tid, .uid = uid, .file_attributes = file_attributes, .creation_time = creation_time, .pathname = pathname };
     }
 
     pub fn serialize(allocator: std.mem.Allocator, request: *const SmbCreateRequest) !SmbMessage {
-        var smbMessage = SmbMessage{ .header = .{ .uid = request.uid, .tid = request.tid, .command = .SMB_COM_CREATE } };
-        errdefer smbMessage.deinit(allocator);
+        var smb_message_writer = SmbMessageWriter.init(.{
+            .command = .SMB_COM_CREATE,
+            .tid = request.tid,
+            .uid = request.uid,
+        });
+        errdefer smb_message_writer.deinit(allocator);
 
-        try smbMessage.reserveParameters(allocator, 3);
-        smbMessage.parameters.words[0] = @intFromEnum(request.file_attributes);
-        std.mem.writeInt(SmbMessage.UTIME, @as(*[4]u8, @alignCast(@ptrCast(&smbMessage.parameters.words[1]))), request.creation_time, .little);
+        try smb_message_writer.reserveParameters(allocator, 3);
+        try smb_message_writer.writeParameter(u16, @intFromEnum(request.file_attributes));
+        try smb_message_writer.writeParameter(SmbMessage.UTIME, request.creation_time);
 
-        const dataBytesCount: u16 = @as(u16, @intCast(1 + request.pathname.len + 1));
-        try smbMessage.reserveData(allocator, dataBytesCount);
-        smbMessage.data.bytes[0] = @intFromEnum(SmbMessage.SmbDataBufferFormatCode.SMB_STRING);
-        std.mem.copyForwards(u8, smbMessage.data.bytes[1 .. @as(u16, @intCast(request.pathname.len)) + 1], request.pathname);
-        smbMessage.data.bytes[1 + request.pathname.len] = 0;
+        const data_bytes_count: u16 = @as(u16, @intCast(1 + request.pathname.len + 1));
+        try smb_message_writer.reserveData(allocator, data_bytes_count);
+        try smb_message_writer.writeData(SmbMessage.SmbDataBufferFormatCode.SMB_STRING, request.pathname);
 
-        return smbMessage;
+        return smb_message_writer.build();
     }
 };
 
 pub const SmbCreateResponse = struct {
     error_status: SmbMessage.SmbError,
+
     fid: SmbMessage.FID,
 
     pub fn deserialize(response: *const SmbMessage) SmbCreateResponse {
-        return .{ .error_status = response.header.status, .fid = @as(i16, @intCast(response.parameters.words[0])) };
+        const fid = @as(i16, @intCast(response.parameters.words[0]));
+        return .{ .error_status = response.header.status, .fid = fid };
     }
 
     pub fn serialize(allocator: std.mem.Allocator, response: *const SmbCreateResponse) !SmbMessage {
-        var smbMessage: SmbMessage = .{ .header = .{
+        var smb_message_writer = SmbMessageWriter.init(.{
             .command = .SMB_COM_CLOSE,
             .status = response.error_status,
-        } };
-        errdefer smbMessage.deinit(allocator);
+        });
+        errdefer smb_message_writer.deinit(allocator);
 
-        try smbMessage.reserveParameters(allocator, 1);
-        smbMessage.parameters.words[0] = @as(u16, @intCast(response.fid));
+        try smb_message_writer.reserveParameters(allocator, 1);
+        try smb_message_writer.writeParameter(u16, @as(u16, @intCast(response.fid)));
 
-        return smbMessage;
+        return smb_message_writer.build();
     }
 };
 
@@ -66,6 +81,8 @@ test "SmbCreateRequest" {
 
     var message = try SmbCreateRequest.serialize(allocator, &request);
     defer message.deinit(allocator);
+    try std.testing.expect(message.data.bytes_count == 11);
+    try std.testing.expect(std.mem.eql(u8, message.data.bytes[0..11], &[11]u8{ 0x04, 'H', 'e', 'l', 'l', 'o', '.', 't', 'x', 't', 0 }));
 
     const requestMessage = SmbCreateRequest.deserialize(&message);
     try std.testing.expect(request.uid == requestMessage.uid);
