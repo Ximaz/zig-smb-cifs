@@ -1,6 +1,7 @@
 const std = @import("std");
 const SmbMessage = @import("SmbMessage.zig");
 const SmbMessageWriter = @import("SmbMessageWriter.zig");
+const SmbMessageReader = @import("SmbMessageReader.zig");
 
 pub const SmbCreateRequest = struct {
     tid: SmbMessage.TID,
@@ -9,21 +10,18 @@ pub const SmbCreateRequest = struct {
     file_attributes: SmbMessage.SmbFileAttributes,
     creation_time: SmbMessage.UTIME,
 
-    pathname: []const u8,
+    pathname: []u8,
 
-    pub fn deserialize(request: *const SmbMessage) SmbCreateRequest {
+    pub fn deserialize(request: *const SmbMessage, allocator: std.mem.Allocator) !SmbCreateRequest {
+        var smb_message_reader = SmbMessageReader.init(request);
+
         const tid: SmbMessage.TID = request.header.tid;
         const uid: SmbMessage.UID = request.header.uid;
 
-        const file_attributes: SmbMessage.SmbFileAttributes = @enumFromInt(request.parameters.words[0]);
-        const creation_time: SmbMessage.UTIME = std.mem.readInt(SmbMessage.UTIME, @ptrCast(request.parameters.words[1..]), .little);
+        const file_attributes: SmbMessage.SmbFileAttributes = @enumFromInt(try smb_message_reader.readParameter(u16));
+        const creation_time: SmbMessage.UTIME = try smb_message_reader.readParameter(SmbMessage.UTIME);
 
-        const pathname_length = strlen: {
-            var i: u16 = 0;
-            while (request.data.bytes[1 + i] != 0) : (i += 1) {}
-            break :strlen i;
-        };
-        const pathname: []const u8 = request.data.bytes[1 .. pathname_length + 1];
+        const pathname = try smb_message_reader.readData(allocator);
 
         return .{ .tid = tid, .uid = uid, .file_attributes = file_attributes, .creation_time = creation_time, .pathname = pathname };
     }
@@ -53,8 +51,10 @@ pub const SmbCreateResponse = struct {
 
     fid: SmbMessage.FID,
 
-    pub fn deserialize(response: *const SmbMessage) SmbCreateResponse {
-        const fid = @as(i16, @intCast(response.parameters.words[0]));
+    pub fn deserialize(response: *const SmbMessage) !SmbCreateResponse {
+        var smb_message_reader = SmbMessageReader.init(response);
+
+        const fid: i16 = try smb_message_reader.readParameter(i16);
         return .{ .error_status = response.header.status, .fid = fid };
     }
 
@@ -73,7 +73,11 @@ pub const SmbCreateResponse = struct {
 };
 
 test "SmbCreateRequest" {
-    const request = SmbCreateRequest{ .uid = 5, .tid = 10, .pathname = "Hello.txt", .file_attributes = .SMB_FILE_ATTRIBUTE_NORMAL, .creation_time = 0xFFAABB00 };
+    // Here we're doing a constCast as the pathname is known at compile time
+    // but the SmbCreateRequest would only happen with runtime values as its
+    // purpose is to craft a request, involving compiletime unknown values.
+    const pathname: []u8 = @constCast("Hello.txt");
+    const request = SmbCreateRequest{ .uid = 5, .tid = 10, .pathname = pathname, .file_attributes = .SMB_FILE_ATTRIBUTE_NORMAL, .creation_time = 0xFFAABB00 };
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
 
@@ -84,7 +88,9 @@ test "SmbCreateRequest" {
     try std.testing.expect(message.data.bytes_count == 11);
     try std.testing.expect(std.mem.eql(u8, message.data.bytes[0..11], &[11]u8{ 0x04, 'H', 'e', 'l', 'l', 'o', '.', 't', 'x', 't', 0 }));
 
-    const requestMessage = SmbCreateRequest.deserialize(&message);
+    const requestMessage = try SmbCreateRequest.deserialize(&message, allocator);
+    defer allocator.free(requestMessage.pathname);
+
     try std.testing.expect(request.uid == requestMessage.uid);
     try std.testing.expect(request.tid == requestMessage.tid);
     try std.testing.expect(std.mem.eql(u8, request.pathname, requestMessage.pathname));
@@ -102,7 +108,7 @@ test "SmbCloseReponse" {
     var message = try SmbCreateResponse.serialize(allocator, &response);
     defer message.deinit(allocator);
 
-    const responseMessage = SmbCreateResponse.deserialize(&message);
+    const responseMessage = try SmbCreateResponse.deserialize(&message);
     try std.testing.expect(response.error_status.error_class == responseMessage.error_status.error_class);
     try std.testing.expect(response.error_status.error_code == responseMessage.error_status.error_code);
     try std.testing.expect(response.fid == responseMessage.fid);

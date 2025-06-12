@@ -1,6 +1,7 @@
 const std = @import("std");
 const SmbMessage = @import("SmbMessage.zig");
 const SmbMessageWriter = @import("SmbMessageWriter.zig");
+const SmbMessageReader = @import("SmbMessageReader.zig");
 
 pub const SmbCloseRequest = struct {
     uid: SmbMessage.UID,
@@ -8,26 +9,29 @@ pub const SmbCloseRequest = struct {
     fid: SmbMessage.FID,
     last_time_modified: SmbMessage.UTIME,
 
-    pub fn deserialize(request: *const SmbMessage) SmbCloseRequest {
+    pub fn deserialize(request: *const SmbMessage) !SmbCloseRequest {
+        var smb_message_reader = SmbMessageReader.init(request);
+
         const uid: SmbMessage.UID = request.header.uid;
-        const fid: SmbMessage.FID = @intCast(request.parameters.words[0]);
-        const last_time_modified: SmbMessage.UTIME = std.mem.readInt(SmbMessage.UTIME, @ptrCast(request.parameters.words[1..]), .little);
+
+        const fid: SmbMessage.FID = try smb_message_reader.readParameter(SmbMessage.FID);
+        const last_time_modified: SmbMessage.UTIME = try smb_message_reader.readParameter(SmbMessage.UTIME);
 
         return .{ .uid = uid, .fid = fid, .last_time_modified = last_time_modified };
     }
 
     pub fn serialize(allocator: std.mem.Allocator, request: *const SmbCloseRequest) !SmbMessage {
-        var smb_message_builder = SmbMessageWriter.init(.{
+        var smb_message_writer = SmbMessageWriter.init(.{
             .command = .SMB_COM_CLOSE,
             .uid = request.uid,
         });
-        errdefer smb_message_builder.deinit(allocator);
+        errdefer smb_message_writer.deinit(allocator);
 
-        try smb_message_builder.reserveParameters(allocator, 3);
-        try smb_message_builder.writeParameter(SmbMessage.FID, request.fid);
-        try smb_message_builder.writeParameter(SmbMessage.UTIME, request.last_time_modified);
+        try smb_message_writer.reserveParameters(allocator, 3);
+        try smb_message_writer.writeParameter(SmbMessage.FID, request.fid);
+        try smb_message_writer.writeParameter(SmbMessage.UTIME, request.last_time_modified);
 
-        return smb_message_builder.build();
+        return smb_message_writer.build();
     }
 };
 
@@ -56,7 +60,7 @@ test "SmbCloseRequest" {
     var message = try SmbCloseRequest.serialize(allocator, &request);
     defer message.deinit(allocator);
 
-    const requestMessage = SmbCloseRequest.deserialize(&message);
+    const requestMessage = try SmbCloseRequest.deserialize(&message);
     try std.testing.expect(request.uid == requestMessage.uid);
     try std.testing.expect(requestMessage.uid == 10);
     try std.testing.expect(request.fid == requestMessage.fid);
