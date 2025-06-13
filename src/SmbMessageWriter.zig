@@ -15,7 +15,7 @@ data_cursor: u16 = 0,
 
 parameters_cursor: u8 = 0,
 
-/// Instantiate the SmbMessageriter object.
+/// Instantiate the SmbMessageWriter object.
 pub fn init(header: SmbMessage.SmbMessageHeader) SmbMessageWriter {
     return .{ .message = .{ .header = header } };
 }
