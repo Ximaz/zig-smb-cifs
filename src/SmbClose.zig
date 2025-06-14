@@ -51,11 +51,15 @@ pub const SmbCloseResponse = struct {
 };
 
 test "SmbCloseRequest" {
-    const request = SmbCloseRequest{ .fid = 5, .uid = 10, .last_time_modified = 0xFFAABB00 };
+    const request = SmbCloseRequest{ .uid = 10, .fid = 5, .last_time_modified = 0xFFAABB00 };
     const allocator = std.testing.allocator;
 
     var message = try SmbCloseRequest.serialize(allocator, &request);
     defer message.deinit(allocator);
+    try std.testing.expect(message.header.command == .SMB_COM_CLOSE);
+    try std.testing.expect(message.header.uid == 10);
+    try std.testing.expect(message.parameters.words_count == 3);
+    try std.testing.expect(message.data.bytes_count == 0);
 
     const requestMessage = try SmbCloseRequest.deserialize(&message);
     try std.testing.expect(request.uid == requestMessage.uid);
@@ -73,6 +77,10 @@ test "SmbCloseReponse" {
     } };
 
     const message = SmbCloseResponse.serialize(&response);
+    try std.testing.expect(message.header.command == .SMB_COM_CLOSE);
+    try std.testing.expect(message.header.uid == 0x0000);
+    try std.testing.expect(message.parameters.words_count == 0);
+    try std.testing.expect(message.data.bytes_count == 0);
 
     const responseMessage = SmbCloseResponse.deserialize(&message);
     try std.testing.expect(response.error_status.error_class == responseMessage.error_status.error_class);

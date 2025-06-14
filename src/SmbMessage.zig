@@ -1786,7 +1786,7 @@ pub const SmbMessageHeader = extern struct {
     /// If set to a nonzero value, this field represents the high-order
     /// bytes of a process identifier (PID). It is combined with the PIDLow
     /// field below to form a full PID.
-    pid_high: u16 align(1) = 0x00,
+    pid_high: u16 align(1) = 0x0000,
 
     /// Neither an smb_com_negociate_security_features_t nor an
     /// smb_security_features_t context, so it MUST be set to zero by the client
@@ -1797,16 +1797,16 @@ pub const SmbMessageHeader = extern struct {
     reserved: u16 align(1) = 0x0000,
 
     /// A tree identifier (TID).
-    tid: TID align(1) = 0x00,
+    tid: TID align(1) = 0x0000,
 
     /// The lower 16-bits of the PID.
-    pid_low: u16 align(1) = 0x00,
+    pid_low: u16 align(1) = 0x0000,
 
     /// A user identifier (UID).
-    uid: UID align(1) = 0x00,
+    uid: UID align(1) = 0x0000,
 
     /// A multiplex identifier (MID).
-    mid: MID align(1) = 0x00,
+    mid: MID align(1) = 0x0000,
 };
 
 /// SMB was originally designed as a rudimentary remote procedure call

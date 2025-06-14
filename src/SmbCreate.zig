@@ -60,7 +60,7 @@ pub const SmbCreateResponse = struct {
 
     pub fn serialize(allocator: std.mem.Allocator, response: *const SmbCreateResponse) !SmbMessage {
         var smb_message_writer = SmbMessageWriter.init(.{
-            .command = .SMB_COM_CLOSE,
+            .command = .SMB_COM_CREATE,
             .status = response.error_status,
         });
         errdefer smb_message_writer.deinit(allocator);
@@ -77,30 +77,38 @@ test "SmbCreateRequest" {
     // but the SmbCreateRequest would only happen with runtime values as its
     // purpose is to craft a request, involving compiletime unknown values.
     const pathname: []u8 = @constCast("Hello.txt");
-    const request = SmbCreateRequest{ .uid = 5, .tid = 10, .pathname = pathname, .file_attributes = .SMB_FILE_ATTRIBUTE_NORMAL, .creation_time = 0xFFAABB00 };
+    const request = SmbCreateRequest{ .tid = 10, .uid = 5, .file_attributes = .SMB_FILE_ATTRIBUTE_NORMAL, .creation_time = 0xFFAABB00, .pathname = pathname };
     const allocator = std.testing.allocator;
 
     var message = try SmbCreateRequest.serialize(allocator, &request);
     defer message.deinit(allocator);
+    try std.testing.expect(message.header.command == .SMB_COM_CREATE);
+    try std.testing.expect(message.header.tid == 10);
+    try std.testing.expect(message.header.uid == 5);
+    try std.testing.expect(message.parameters.words_count == 3);
     try std.testing.expect(message.data.bytes_count == 11);
-    try std.testing.expect(std.mem.eql(u8, message.data.bytes[0..11], &[11]u8{ 0x04, 'H', 'e', 'l', 'l', 'o', '.', 't', 'x', 't', 0 }));
 
     const requestMessage = try SmbCreateRequest.deserialize(&message, allocator);
     defer allocator.free(requestMessage.pathname);
 
-    try std.testing.expect(request.uid == requestMessage.uid);
     try std.testing.expect(request.tid == requestMessage.tid);
-    try std.testing.expect(std.mem.eql(u8, request.pathname, requestMessage.pathname));
+    try std.testing.expect(request.uid == requestMessage.uid);
     try std.testing.expect(request.file_attributes == requestMessage.file_attributes);
     try std.testing.expect(request.creation_time == requestMessage.creation_time);
+    try std.testing.expect(std.mem.eql(u8, request.pathname, requestMessage.pathname));
 }
 
-test "SmbCloseReponse" {
+test "SmbCreateReponse" {
     const response = SmbCreateResponse{ .error_status = .{ .error_class = .ERRCLS_DOS, .error_code = .ERRDOS_BAD_FID }, .fid = 100 };
     const allocator = std.testing.allocator;
 
     var message = try SmbCreateResponse.serialize(allocator, &response);
     defer message.deinit(allocator);
+    try std.testing.expect(message.header.command == .SMB_COM_CREATE);
+    try std.testing.expect(message.header.tid == 0x0000);
+    try std.testing.expect(message.header.uid == 0x0000);
+    try std.testing.expect(message.parameters.words_count == 1);
+    try std.testing.expect(message.data.bytes_count == 0);
 
     const responseMessage = try SmbCreateResponse.deserialize(&message);
     try std.testing.expect(response.error_status.error_class == responseMessage.error_status.error_class);
