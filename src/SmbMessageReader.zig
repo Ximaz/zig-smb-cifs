@@ -2,19 +2,25 @@ const std = @import("std");
 const SmbMessage = @import("SmbMessage.zig");
 
 pub const SmbMessageReaderError = error{
-    InvalidMemorySize,
+    /// Returned when all Data block has been read and the readData method is
+    /// being called.
     DataBytesOutOfMemory,
+
+    /// Returned when all Parameters block has been read and the readParameter
+    /// method is being called.
     ParametersWordsOutOfMemory,
-    DataBufferFormatCodeUnknown,
 };
 
 pub const SmbMessageReader = @This();
 
+/// The SmbMessage to read data from.
 message: *const SmbMessage,
 
-data_cursor: u16 = 0,
-
+/// The reading cursor of the Parameters block.
 parameters_cursor: u8 = 0,
+
+/// The reading cursor of the Data block.
+data_cursor: u16 = 0,
 
 /// Instantiate the SmbMessageReader object. None of the object's method must
 /// modify the original message, thus marking it as const.

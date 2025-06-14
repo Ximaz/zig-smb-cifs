@@ -2,18 +2,32 @@ const std = @import("std");
 const SmbMessage = @import("SmbMessage.zig");
 
 pub const SmbMessageWriterError = error{
+    /// Returned when an invalid memory allocation size is passed to
+    /// reserveParameters or reserveData methods.
     InvalidMemorySize,
+
+    /// Returned when there is no more space to write the Data block bytes by
+    /// the writeData method. Likely because the reserveData has not been used
+    /// correctly.
     DataBytesOutOfMemory,
+
+    /// Returned when there is no more space to write in the Parameter block by
+    /// the writeParameter method. Likely because the reserveData has not been
+    /// used correctly.
     ParametersWordsOutOfMemory,
 };
 
 pub const SmbMessageWriter = @This();
 
+/// The SmbMessage to write to. This is abstracted as the methods below must be
+/// used to manipulate this object.
 message: SmbMessage = .{},
 
-data_cursor: u16 = 0,
-
+/// The writing cursor of the Parameters block.
 parameters_cursor: u8 = 0,
+
+/// The writing cursor of the Data block.
+data_cursor: u16 = 0,
 
 /// Instantiate the SmbMessageWriter object.
 pub fn init(header: SmbMessage.SmbMessageHeader) SmbMessageWriter {
