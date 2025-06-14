@@ -52,10 +52,7 @@ pub const SmbCloseResponse = struct {
 
 test "SmbCloseRequest" {
     const request = SmbCloseRequest{ .fid = 5, .uid = 10, .last_time_modified = 0xFFAABB00 };
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
 
     var message = try SmbCloseRequest.serialize(allocator, &request);
     defer message.deinit(allocator);

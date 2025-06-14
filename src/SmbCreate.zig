@@ -78,10 +78,7 @@ test "SmbCreateRequest" {
     // purpose is to craft a request, involving compiletime unknown values.
     const pathname: []u8 = @constCast("Hello.txt");
     const request = SmbCreateRequest{ .uid = 5, .tid = 10, .pathname = pathname, .file_attributes = .SMB_FILE_ATTRIBUTE_NORMAL, .creation_time = 0xFFAABB00 };
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
 
     var message = try SmbCreateRequest.serialize(allocator, &request);
     defer message.deinit(allocator);
@@ -100,10 +97,7 @@ test "SmbCreateRequest" {
 
 test "SmbCloseReponse" {
     const response = SmbCreateResponse{ .error_status = .{ .error_class = .ERRCLS_DOS, .error_code = .ERRDOS_BAD_FID }, .fid = 100 };
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
 
     var message = try SmbCreateResponse.serialize(allocator, &response);
     defer message.deinit(allocator);
