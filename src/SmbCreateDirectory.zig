@@ -85,7 +85,7 @@ test "SmbCreateDirectoryReponse" {
     try std.testing.expect(message.parameters.words_count == 0);
     try std.testing.expect(message.data.bytes_count == 0);
 
-    const responseMessage = try SmbCreateDirectoryResponse.deserialize(&message);
+    const responseMessage = SmbCreateDirectoryResponse.deserialize(&message);
     try std.testing.expect(response.error_status.error_class == responseMessage.error_status.error_class);
     try std.testing.expect(response.error_status.error_code == responseMessage.error_status.error_code);
 }

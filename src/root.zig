@@ -6,6 +6,10 @@ const testing = std.testing;
 pub const SmbMessage = @import("SmbMessage.zig");
 pub const SmbClose = @import("SmbClose.zig");
 pub const SmbCreate = @import("SmbCreate.zig");
+pub const SmbDelete = @import("SmbDelete.zig");
+pub const SmbCreateDirectory = @import("SmbCreateDirectory.zig");
+pub const SmbDeleteDirectory = @import("SmbDeleteDirectory.zig");
+pub const SmbFlush = @import("SmbFlush.zig");
 
 test {
     _ = std.testing.refAllDecls(@This());
