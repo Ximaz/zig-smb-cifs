@@ -16,13 +16,13 @@ pub const SmbDeleteRequest = struct {
     pub fn deserialize(request: *const SmbMessage, allocator: std.mem.Allocator) !SmbDeleteRequest {
         var smb_message_reader = SmbMessageReader.init(request);
 
-        const long_names: bool = request.header.flags2 == .SMB_FLAGS2_LONG_NAMES;
+        const long_names: bool = (request.header.flags2 & @intFromEnum(SmbMessage.SmbFlags2.SMB_FLAGS2_LONG_NAMES)) == @intFromEnum(SmbMessage.SmbFlags2.SMB_FLAGS2_LONG_NAMES);
         const tid: SmbMessage.TID = request.header.tid;
         const uid: SmbMessage.UID = request.header.uid;
 
         const search_attributes: SmbMessage.SmbFileAttributes = @enumFromInt(try smb_message_reader.readParameter(u16));
 
-        const filename = try smb_message_reader.readData(allocator);
+        const filename: []u8 = try smb_message_reader.readData(allocator);
 
         return .{ .long_names = long_names, .tid = tid, .uid = uid, .search_attributes = search_attributes, .filename = filename };
     }
@@ -30,7 +30,7 @@ pub const SmbDeleteRequest = struct {
     pub fn serialize(allocator: std.mem.Allocator, request: *const SmbDeleteRequest) !SmbMessage {
         var smb_message_writer = SmbMessageWriter.init(.{
             .command = .SMB_COM_DELETE,
-            .flags2 = if (request.long_names) .SMB_FLAGS2_LONG_NAMES else .SMB_FLAGS2_NONE,
+            .flags2 = 0 | (@intFromEnum(SmbMessage.SmbFlags2.SMB_FLAGS2_LONG_NAMES) * @intFromBool(request.long_names)),
             .tid = request.tid,
             .uid = request.uid,
         });
@@ -75,7 +75,7 @@ test "SmbDeleteRequest" {
     var message = try SmbDeleteRequest.serialize(allocator, &request);
     defer message.deinit(allocator);
     try std.testing.expect(message.header.command == .SMB_COM_DELETE);
-    try std.testing.expect(message.header.flags2 == .SMB_FLAGS2_LONG_NAMES);
+    try std.testing.expect((message.header.flags2 & @intFromEnum(SmbMessage.SmbFlags2.SMB_FLAGS2_LONG_NAMES)) == @intFromEnum(SmbMessage.SmbFlags2.SMB_FLAGS2_LONG_NAMES));
     try std.testing.expect(message.header.tid == 10);
     try std.testing.expect(message.header.uid == 5);
     try std.testing.expect(message.parameters.words_count == 1);

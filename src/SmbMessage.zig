@@ -1777,11 +1777,11 @@ pub const SmbMessageHeader = extern struct {
 
     /// An 8-bit field of 1-bit flags describing various features in
     /// effect for the message.
-    flags: SmbFlags align(1) = .SMB_FLAGS_NONE,
+    flags: u8 align(1) = 0x00,
 
     /// A 16-bit field of 1-bit flags that represent various features in
     /// effect for the message. Unspecified bits are reserved and MUST be zero.
-    flags2: SmbFlags2 align(1) = .SMB_FLAGS2_NONE,
+    flags2: u16 align(1) = 0x0000,
 
     /// If set to a nonzero value, this field represents the high-order
     /// bytes of a process identifier (PID). It is combined with the PIDLow
@@ -1900,8 +1900,6 @@ pub const SmbAccessMode = enum(u16) {
     ACCESS_MODE_RESERVED_7 = (0x07 << 0),
 
     // Sharing Mode (Bits [4-6], Mask 0x0070)
-
-    SHARING_MODE_COMPAT = (0x00 << 4),
     SHARING_MODE_DENY_ALL = (0x01 << 4),
     SHARING_MODE_DENY_WRITE = (0x02 << 4),
     SHARING_MODE_DENY_READ = (0x03 << 4),
@@ -1914,7 +1912,6 @@ pub const SmbAccessMode = enum(u16) {
     SHARING_MODE_RESERVED_7 = (0x07 << 4),
 
     // Reference Locality (Bits [8-10], Mask 0x0700)
-    REF_LOCALITY_UNKNOWN = (0x00 << 8),
     REF_LOCALITY_SEQUENTIAL = (0x01 << 8),
     REF_LOCALITY_RANDOM_ACCESS = (0x02 << 8),
     REF_LOCALITY_RANDSEQ = (0x03 << 8),
@@ -1928,12 +1925,18 @@ pub const SmbAccessMode = enum(u16) {
     REF_LOCALITY_RESERVED_7 = (0x07 << 8),
 
     // Cache Mode (Bit 12, Mask 0x1000)
-    CACHE_MODE_CACHED = (0x00 << 12),
     CACHE_MODE_NONCACHED = (0x01 << 12),
 
     // Writethrough Mode (Bit 14, Mask 0x4000)
-    WRITETHROUGH_MODE_WRITEBACK = (0x00 << 14),
     WRITETHROUGH_MODE_WRITETHROUGH = (0x01 << 14),
+
+    pub const SHARING_MODE_COMPAT: SmbAccessMode = (0x00 << 4);
+
+    pub const REF_LOCALITY_UNKNOWN: SmbAccessMode = (0x00 << 8);
+
+    pub const CACHE_MODE_CACHED: SmbAccessMode = (0x00 << 12);
+
+    pub const WRITETHROUGH_MODE_WRITEBACK: SmbAccessMode = (0x00 << 14);
 };
 
 const SmbMessage = @This();
@@ -2017,8 +2020,8 @@ test "SmbMessage.deserialize" {
     try std.testing.expect(message.header.command == .SMB_COM_CREATE);
     try std.testing.expect(message.header.status.error_class == .ERRCLS_SUCCESS);
     try std.testing.expect(message.header.status.error_code == .ERR_SUCCESS);
-    try std.testing.expect(message.header.flags == .SMB_FLAGS_NONE);
-    try std.testing.expect(message.header.flags2 == .SMB_FLAGS2_NONE);
+    try std.testing.expect(message.header.flags == @intFromEnum(SmbMessage.SmbFlags.SMB_FLAGS_NONE));
+    try std.testing.expect(message.header.flags2 == @intFromEnum(SmbMessage.SmbFlags2.SMB_FLAGS2_NONE));
     try std.testing.expect(message.header.pid_high == 0);
     try std.testing.expect(std.mem.eql(u8, &message.header.security_features, &[8]u8{ 0, 0, 0, 0, 0, 0, 0, 0 }));
     try std.testing.expect(message.header.reserved == 0);
@@ -2070,8 +2073,8 @@ test "SmbMessage.serialize" {
     try std.testing.expect(message.header.command == .SMB_COM_CREATE);
     try std.testing.expect(message.header.status.error_class == .ERRCLS_SUCCESS);
     try std.testing.expect(message.header.status.error_code == .ERR_SUCCESS);
-    try std.testing.expect(message.header.flags == .SMB_FLAGS_NONE);
-    try std.testing.expect(message.header.flags2 == .SMB_FLAGS2_NONE);
+    try std.testing.expect(message.header.flags == @intFromEnum(SmbMessage.SmbFlags.SMB_FLAGS_NONE));
+    try std.testing.expect(message.header.flags2 == @intFromEnum(SmbMessage.SmbFlags2.SMB_FLAGS2_NONE));
     try std.testing.expect(message.header.pid_high == 0);
     try std.testing.expect(std.mem.eql(u8, &message.header.security_features, &[8]u8{ 0, 0, 0, 0, 0, 0, 0, 0 }));
     try std.testing.expect(message.header.reserved == 0);

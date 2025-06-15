@@ -15,7 +15,7 @@ pub const SmbCreateDirectoryRequest = struct {
         const tid: SmbMessage.TID = request.header.tid;
         const uid: SmbMessage.UID = request.header.uid;
 
-        const pathname = try smb_message_reader.readData(allocator);
+        const pathname: []u8 = try smb_message_reader.readData(allocator);
 
         return .{ .tid = tid, .uid = uid, .pathname = pathname };
     }
