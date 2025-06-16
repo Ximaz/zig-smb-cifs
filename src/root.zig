@@ -12,6 +12,7 @@ pub const SmbDeleteDirectory = @import("SmbDeleteDirectory.zig");
 pub const SmbFlush = @import("SmbFlush.zig");
 pub const SmbOpen = @import("SmbOpen.zig");
 pub const SmbQueryInformation = @import("SmbQueryInformation.zig");
+pub const SmbRead = @import("SmbRead.zig");
 
 test {
     _ = std.testing.refAllDecls(@This());

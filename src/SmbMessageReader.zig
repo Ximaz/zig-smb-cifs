@@ -121,6 +121,7 @@ pub fn readData(self: *SmbMessageReader, allocator: std.mem.Allocator) ![]u8 {
             const source = self.message.data.bytes[self.data_cursor..][0..data_buffer_length];
             std.mem.copyForwards(u8, bytes, source);
 
+            self.data_cursor += data_buffer_length;
             return bytes;
         },
         .DIALECT_STRING, .PATHNAME, .SMB_STRING => {

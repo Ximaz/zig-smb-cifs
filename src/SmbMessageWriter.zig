@@ -149,19 +149,33 @@ pub fn reserveData(self: *SmbMessageWriter, allocator: std.mem.Allocator, bytes_
 /// This methods returns an error if the given byte sequence would not fit in
 /// the remaining slots of the Data block.
 pub fn writeData(self: *SmbMessageWriter, data_type: SmbMessage.SmbDataBufferFormatCode, bytes: []const u8) !void {
-    const data_size: usize = bytes.len + 1 + self.data_cursor + 1;
-    if (data_size > self.message.data.bytes_count) {
+    const data_size: usize = switch (data_type) {
+        .DATA_BUFFER, .VARIABLE_BLOCK => 1 + 2 + bytes.len,
+        .DIALECT_STRING, .PATHNAME, .SMB_STRING => 1 + bytes.len,
+    };
+    if ((data_size + self.data_cursor) > self.message.data.bytes_count) {
         return SmbMessageWriterError.DataBytesOutOfMemory;
     }
 
     self.message.data.bytes[self.data_cursor] = @intFromEnum(data_type);
     self.data_cursor += 1;
 
-    std.mem.copyForwards(u8, @ptrCast(self.message.data.bytes[self.data_cursor..][0 .. bytes.len + 1]), bytes);
-    self.data_cursor += @as(u16, @intCast(bytes.len));
+    switch (data_type) {
+        .DATA_BUFFER, .VARIABLE_BLOCK => {
+            std.mem.writeInt(u16, @ptrCast(self.message.data.bytes[self.data_cursor..]), @intCast(bytes.len), .little);
+            self.data_cursor += 2;
 
-    self.message.data.bytes[self.data_cursor] = 0;
-    self.data_cursor += 1;
+            std.mem.copyForwards(u8, @ptrCast(self.message.data.bytes[self.data_cursor..][0..bytes.len]), bytes);
+            self.data_cursor += @intCast(bytes.len);
+        },
+        .DIALECT_STRING, .PATHNAME, .SMB_STRING => {
+            std.mem.copyForwards(u8, @ptrCast(self.message.data.bytes[self.data_cursor..][0..bytes.len]), bytes);
+            self.data_cursor += @intCast(bytes.len);
+
+            self.message.data.bytes[self.data_cursor] = 0;
+            self.data_cursor += 1;
+        },
+    }
 }
 
 /// Returns the composed SmbMessage.
