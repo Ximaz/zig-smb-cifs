@@ -15,7 +15,7 @@ pub const SmbQueryInformationRequest = struct {
         const tid: SmbMessage.TID = request.header.tid;
         const uid: SmbMessage.UID = request.header.uid;
 
-        const filename = try smb_message_reader.readData(allocator);
+        const filename: []u8 = try smb_message_reader.readData(allocator);
 
         return .{ .tid = tid, .uid = uid, .filename = filename };
     }
@@ -50,7 +50,10 @@ pub const SmbQueryInformationResponse = struct {
         const file_attributes: u16 = try smb_message_reader.readParameter(u16);
         const last_write_time: SmbMessage.UTIME = try smb_message_reader.readParameter(SmbMessage.UTIME);
         const file_size: u32 = try smb_message_reader.readParameter(u32);
-        const _reserved: [5]u16 = try smb_message_reader.readParameter([5]u16);
+        var _reserved: [5]u16 = .{ 0, 0, 0, 0, 0 };
+        inline for (0..5) |index| {
+            _reserved[index] = try smb_message_reader.readParameter(u16);
+        }
 
         return .{
             .error_status = response.header.status,
@@ -68,8 +71,13 @@ pub const SmbQueryInformationResponse = struct {
         });
         errdefer smb_message_writer.deinit(allocator);
 
-        try smb_message_writer.reserveParameters(allocator, 1);
-        try smb_message_writer.writeParameter(u16, @as(u16, @intCast(response.fid)));
+        try smb_message_writer.reserveParameters(allocator, 10);
+        try smb_message_writer.writeParameter(u16, response.file_attributes);
+        try smb_message_writer.writeParameter(SmbMessage.UTIME, response.last_write_time);
+        try smb_message_writer.writeParameter(u32, response.file_size);
+        inline for (0..5) |_| {
+            try smb_message_writer.writeParameter(u16, 0x0000);
+        }
 
         return smb_message_writer.build();
     }
@@ -77,18 +85,19 @@ pub const SmbQueryInformationResponse = struct {
 
 test "SmbQueryInformationRequest" {
     // Here we're doing a constCast as the filename is known at compile time
-    // but the SmbQueryInformationRequest would only happen with runtime values as its
-    // purpose is to craft a request, involving compiletime unknown values.
+    // but the SmbQueryInformationRequest would only happen with runtime values
+    // as its purpose is to craft a request, involving compiletime unknown
+    // values.
     const filename: []u8 = @constCast("Hello.txt");
-    const request = SmbQueryInformationRequest{ .tid = 10, .uid = 5, .file_attributes = .SMB_FILE_ATTRIBUTE_NORMAL, .creation_time = 0xFFAABB00, .filename = filename };
+    const request = SmbQueryInformationRequest{ .tid = 10, .uid = 5, .filename = filename };
     const allocator = std.testing.allocator;
 
     var message = try SmbQueryInformationRequest.serialize(allocator, &request);
     defer message.deinit(allocator);
-    try std.testing.expect(message.header.command == .SMB_COM_CREATE);
+    try std.testing.expect(message.header.command == .SMB_COM_QUERY_INFORMATION);
     try std.testing.expect(message.header.tid == 10);
     try std.testing.expect(message.header.uid == 5);
-    try std.testing.expect(message.parameters.words_count == 3);
+    try std.testing.expect(message.parameters.words_count == 0);
     try std.testing.expect(message.data.bytes_count == 11);
 
     const requestMessage = try SmbQueryInformationRequest.deserialize(&message, allocator);
@@ -96,25 +105,26 @@ test "SmbQueryInformationRequest" {
 
     try std.testing.expect(request.tid == requestMessage.tid);
     try std.testing.expect(request.uid == requestMessage.uid);
-    try std.testing.expect(request.file_attributes == requestMessage.file_attributes);
-    try std.testing.expect(request.creation_time == requestMessage.creation_time);
     try std.testing.expect(std.mem.eql(u8, request.filename, requestMessage.filename));
 }
 
-test "SmbCreateReponse" {
-    const response = SmbQueryInformationResponse{ .error_status = .{ .error_class = .ERRCLS_DOS, .error_code = .ERRDOS_BAD_FID }, .fid = 100 };
+test "SmbQueryInformationReponse" {
+    const response = SmbQueryInformationResponse{ .error_status = .{ .error_class = .ERRCLS_DOS, .error_code = .ERRDOS_BAD_FID }, .file_attributes = 0 | (@intFromEnum(SmbMessage.SmbFileAttributes.SMB_FILE_ATTRIBUTE_NORMAL)), .file_size = 0xFFFFFFFE, .last_write_time = 0xFF00BBCC, ._reserved = .{ 0x0000, 0x0000, 0x0000, 0x0000, 0x0000 } };
     const allocator = std.testing.allocator;
 
     var message = try SmbQueryInformationResponse.serialize(allocator, &response);
     defer message.deinit(allocator);
-    try std.testing.expect(message.header.command == .SMB_COM_CREATE);
+    try std.testing.expect(message.header.command == .SMB_COM_QUERY_INFORMATION);
     try std.testing.expect(message.header.tid == 0x0000);
     try std.testing.expect(message.header.uid == 0x0000);
-    try std.testing.expect(message.parameters.words_count == 1);
+    try std.testing.expect(message.parameters.words_count == 10);
     try std.testing.expect(message.data.bytes_count == 0);
 
     const responseMessage = try SmbQueryInformationResponse.deserialize(&message);
     try std.testing.expect(response.error_status.error_class == responseMessage.error_status.error_class);
     try std.testing.expect(response.error_status.error_code == responseMessage.error_status.error_code);
-    try std.testing.expect(response.fid == responseMessage.fid);
+    try std.testing.expect(response.file_attributes == responseMessage.file_attributes);
+    try std.testing.expect(response.last_write_time == responseMessage.last_write_time);
+    try std.testing.expect(response.file_size == responseMessage.file_size);
+    try std.testing.expect(std.mem.eql(u16, response._reserved[0..5], responseMessage._reserved[0..5]));
 }
