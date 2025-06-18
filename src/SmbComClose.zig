@@ -3,13 +3,13 @@ const SmbMessage = @import("SmbMessage.zig");
 const SmbMessageWriter = @import("SmbMessageWriter.zig");
 const SmbMessageReader = @import("SmbMessageReader.zig");
 
-pub const SmbCloseRequest = struct {
+pub const SmbComCloseRequest = struct {
     uid: SmbMessage.UID,
 
     fid: SmbMessage.FID,
     last_time_modified: SmbMessage.UTIME,
 
-    pub fn deserialize(request: *const SmbMessage) !SmbCloseRequest {
+    pub fn deserialize(request: *const SmbMessage) !SmbComCloseRequest {
         var smb_message_reader = SmbMessageReader.init(request);
 
         const uid: SmbMessage.UID = request.header.uid;
@@ -20,7 +20,7 @@ pub const SmbCloseRequest = struct {
         return .{ .uid = uid, .fid = fid, .last_time_modified = last_time_modified };
     }
 
-    pub fn serialize(allocator: std.mem.Allocator, request: *const SmbCloseRequest) !SmbMessage {
+    pub fn serialize(allocator: std.mem.Allocator, request: *const SmbComCloseRequest) !SmbMessage {
         var smb_message_writer = SmbMessageWriter.init(.{
             .command = .SMB_COM_CLOSE,
             .uid = request.uid,
@@ -35,14 +35,14 @@ pub const SmbCloseRequest = struct {
     }
 };
 
-pub const SmbCloseResponse = struct {
+pub const SmbComCloseResponse = struct {
     error_status: SmbMessage.SmbError,
 
-    pub fn deserialize(response: *const SmbMessage) SmbCloseResponse {
+    pub fn deserialize(response: *const SmbMessage) SmbComCloseResponse {
         return .{ .error_status = response.header.status };
     }
 
-    pub fn serialize(response: *const SmbCloseResponse) SmbMessage {
+    pub fn serialize(response: *const SmbComCloseResponse) SmbMessage {
         return .{ .header = .{
             .command = .SMB_COM_CLOSE,
             .status = response.error_status,
@@ -50,18 +50,18 @@ pub const SmbCloseResponse = struct {
     }
 };
 
-test "SmbCloseRequest" {
-    const request = SmbCloseRequest{ .uid = 10, .fid = 5, .last_time_modified = 0xFFAABB00 };
+test "SmbComCloseRequest" {
+    const request = SmbComCloseRequest{ .uid = 10, .fid = 5, .last_time_modified = 0xFFAABB00 };
     const allocator = std.testing.allocator;
 
-    var message = try SmbCloseRequest.serialize(allocator, &request);
+    var message = try SmbComCloseRequest.serialize(allocator, &request);
     defer message.deinit(allocator);
     try std.testing.expect(message.header.command == .SMB_COM_CLOSE);
     try std.testing.expect(message.header.uid == 10);
     try std.testing.expect(message.parameters.words_count == 3);
     try std.testing.expect(message.data.bytes_count == 0);
 
-    const requestMessage = try SmbCloseRequest.deserialize(&message);
+    const requestMessage = try SmbComCloseRequest.deserialize(&message);
     try std.testing.expect(request.uid == requestMessage.uid);
     try std.testing.expect(requestMessage.uid == 10);
     try std.testing.expect(request.fid == requestMessage.fid);
@@ -70,19 +70,19 @@ test "SmbCloseRequest" {
     try std.testing.expect(requestMessage.last_time_modified == 0xFFAABB00);
 }
 
-test "SmbCloseReponse" {
-    const response = SmbCloseResponse{ .error_status = .{
+test "SmbComCloseReponse" {
+    const response = SmbComCloseResponse{ .error_status = .{
         .error_class = .ERRCLS_DOS,
         .error_code = .ERRDOS_BAD_FID,
     } };
 
-    const message = SmbCloseResponse.serialize(&response);
+    const message = SmbComCloseResponse.serialize(&response);
     try std.testing.expect(message.header.command == .SMB_COM_CLOSE);
     try std.testing.expect(message.header.uid == 0x0000);
     try std.testing.expect(message.parameters.words_count == 0);
     try std.testing.expect(message.data.bytes_count == 0);
 
-    const responseMessage = SmbCloseResponse.deserialize(&message);
+    const responseMessage = SmbComCloseResponse.deserialize(&message);
     try std.testing.expect(response.error_status.error_class == responseMessage.error_status.error_class);
     try std.testing.expect(response.error_status.error_code == responseMessage.error_status.error_code);
 }

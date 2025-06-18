@@ -3,7 +3,7 @@ const SmbMessage = @import("SmbMessage.zig");
 const SmbMessageWriter = @import("SmbMessageWriter.zig");
 const SmbMessageReader = @import("SmbMessageReader.zig");
 
-pub const SmbReadRequest = struct {
+pub const SmbComReadRequest = struct {
     /// Whether to set the SMB_FLAGS2_READ_IF_EXECUTE flag.
     read_if_execute: bool,
     uid: SmbMessage.UID,
@@ -13,7 +13,7 @@ pub const SmbReadRequest = struct {
     read_offset_in_bytes: u32,
     estimate_of_remaning_bytes_to_be_read: u16,
 
-    pub fn deserialize(request: *const SmbMessage) !SmbReadRequest {
+    pub fn deserialize(request: *const SmbMessage) !SmbComReadRequest {
         var smb_message_reader = SmbMessageReader.init(request);
 
         const read_if_execute: bool = (request.header.flags2 & @intFromEnum(SmbMessage.SmbFlags2.SMB_FLAGS2_READ_IF_EXECUTE)) == @intFromEnum(SmbMessage.SmbFlags2.SMB_FLAGS2_READ_IF_EXECUTE);
@@ -34,7 +34,7 @@ pub const SmbReadRequest = struct {
         };
     }
 
-    pub fn serialize(allocator: std.mem.Allocator, request: *const SmbReadRequest) !SmbMessage {
+    pub fn serialize(allocator: std.mem.Allocator, request: *const SmbComReadRequest) !SmbMessage {
         var smb_message_writer = SmbMessageWriter.init(.{
             .flags2 = 0 | (@intFromEnum(SmbMessage.SmbFlags2.SMB_FLAGS2_READ_IF_EXECUTE) * @intFromBool(request.read_if_execute)),
             .command = .SMB_COM_READ,
@@ -52,7 +52,7 @@ pub const SmbReadRequest = struct {
     }
 };
 
-pub const SmbReadResponse = struct {
+pub const SmbComReadResponse = struct {
     error_status: SmbMessage.SmbError,
 
     count_of_bytes_read: u16,
@@ -60,7 +60,7 @@ pub const SmbReadResponse = struct {
 
     bytes: []u8,
 
-    pub fn deserialize(allocator: std.mem.Allocator, response: *const SmbMessage) !SmbReadResponse {
+    pub fn deserialize(allocator: std.mem.Allocator, response: *const SmbMessage) !SmbComReadResponse {
         var smb_message_reader = SmbMessageReader.init(response);
 
         const count_of_bytes_read: u16 = try smb_message_reader.readParameter(u16);
@@ -79,7 +79,7 @@ pub const SmbReadResponse = struct {
         };
     }
 
-    pub fn serialize(allocator: std.mem.Allocator, response: *const SmbReadResponse) !SmbMessage {
+    pub fn serialize(allocator: std.mem.Allocator, response: *const SmbComReadResponse) !SmbMessage {
         var smb_message_writer = SmbMessageWriter.init(.{
             .command = .SMB_COM_READ,
             .status = response.error_status,
@@ -99,11 +99,11 @@ pub const SmbReadResponse = struct {
     }
 };
 
-test "SmbReadRequest" {
-    const request = SmbReadRequest{ .read_if_execute = true, .uid = 10, .fid = 5, .count_of_bytes_to_read = 5, .read_offset_in_bytes = 10, .estimate_of_remaning_bytes_to_be_read = 20 };
+test "SmbComReadRequest" {
+    const request = SmbComReadRequest{ .read_if_execute = true, .uid = 10, .fid = 5, .count_of_bytes_to_read = 5, .read_offset_in_bytes = 10, .estimate_of_remaning_bytes_to_be_read = 20 };
     const allocator = std.testing.allocator;
 
-    var message = try SmbReadRequest.serialize(allocator, &request);
+    var message = try SmbComReadRequest.serialize(allocator, &request);
     defer message.deinit(allocator);
     try std.testing.expect((message.header.flags2 & @intFromEnum(SmbMessage.SmbFlags2.SMB_FLAGS2_READ_IF_EXECUTE)) == @intFromEnum(SmbMessage.SmbFlags2.SMB_FLAGS2_READ_IF_EXECUTE));
     try std.testing.expect(message.header.command == .SMB_COM_READ);
@@ -111,7 +111,7 @@ test "SmbReadRequest" {
     try std.testing.expect(message.parameters.words_count == 5);
     try std.testing.expect(message.data.bytes_count == 0);
 
-    const requestMessage = try SmbReadRequest.deserialize(&message);
+    const requestMessage = try SmbComReadRequest.deserialize(&message);
     try std.testing.expect(request.read_if_execute == requestMessage.read_if_execute);
     try std.testing.expect(requestMessage.read_if_execute == true);
     try std.testing.expect(request.uid == requestMessage.uid);
@@ -126,26 +126,26 @@ test "SmbReadRequest" {
     try std.testing.expect(requestMessage.estimate_of_remaning_bytes_to_be_read == 20);
 }
 
-test "SmbReadReponse" {
+test "SmbComReadReponse" {
     // Here we're doing a constCast as the filename is known at compile time
-    // but the SmBReadRequest would only happen with runtime values as its
+    // but the SmbComReadRequest would only happen with runtime values as its
     // purpose is to craft a request, involving compiletime unknown values.
     const bytes: []u8 = @ptrCast(@constCast("Hello"));
-    const response = SmbReadResponse{ .error_status = .{
+    const response = SmbComReadResponse{ .error_status = .{
         .error_class = .ERRCLS_DOS,
         .error_code = .ERRDOS_BAD_FID,
     }, .count_of_bytes_read = bytes.len, ._reserved = .{ 0, 0, 0, 0 }, .bytes = bytes[0..] };
 
     const allocator = std.testing.allocator;
 
-    var message = try SmbReadResponse.serialize(allocator, &response);
+    var message = try SmbComReadResponse.serialize(allocator, &response);
     defer message.deinit(allocator);
     try std.testing.expect(message.header.command == .SMB_COM_READ);
     try std.testing.expect(message.header.uid == 0x0000);
     try std.testing.expect(message.parameters.words_count == 5);
     try std.testing.expect(message.data.bytes_count == 8);
 
-    const responseMessage = try SmbReadResponse.deserialize(allocator, &message);
+    const responseMessage = try SmbComReadResponse.deserialize(allocator, &message);
     defer allocator.free(responseMessage.bytes);
     try std.testing.expect(response.error_status.error_class == responseMessage.error_status.error_class);
     try std.testing.expect(response.error_status.error_code == responseMessage.error_status.error_code);

@@ -3,13 +3,13 @@ const SmbMessage = @import("SmbMessage.zig");
 const SmbMessageWriter = @import("SmbMessageWriter.zig");
 const SmbMessageReader = @import("SmbMessageReader.zig");
 
-pub const SmbOpenRequestError = error{
+pub const SmbComOpenRequestError = error{
     /// This error is returned when the flag SMB_FLAGS_OPLOCK is not set but
     /// the flag SMB_FLAGS_OPBATCH is set.
     InvalidArgument,
 };
 
-pub const SmbOpenRequest = struct {
+pub const SmbComOpenRequest = struct {
     /// Whether to set the SMB_FLAGS_OPLOCK flag.
     exclusive_opportunistic_lock: bool,
     /// Whether to set the SMB_FLAGS_OPBATCH flag.
@@ -22,7 +22,7 @@ pub const SmbOpenRequest = struct {
 
     filename: []u8,
 
-    pub fn deserialize(request: *const SmbMessage, allocator: std.mem.Allocator) !SmbOpenRequest {
+    pub fn deserialize(request: *const SmbMessage, allocator: std.mem.Allocator) !SmbComOpenRequest {
         var smb_message_reader = SmbMessageReader.init(request);
 
         const exclusive_opportunistic_lock: bool = (request.header.flags & @intFromEnum(SmbMessage.SmbFlags.SMB_FLAGS_OPLOCK)) == @intFromEnum(SmbMessage.SmbFlags.SMB_FLAGS_OPLOCK);
@@ -38,9 +38,9 @@ pub const SmbOpenRequest = struct {
         return .{ .exclusive_opportunistic_lock = exclusive_opportunistic_lock, .batch_exclusive_oplock = batch_exclusive_oplock, .tid = tid, .uid = uid, .access_mode = access_mode, .search_attributes = search_attributes, .filename = filename };
     }
 
-    pub fn serialize(allocator: std.mem.Allocator, request: *const SmbOpenRequest) !SmbMessage {
+    pub fn serialize(allocator: std.mem.Allocator, request: *const SmbComOpenRequest) !SmbMessage {
         if (request.batch_exclusive_oplock and !request.exclusive_opportunistic_lock) {
-            return SmbOpenRequestError.InvalidArgument;
+            return SmbComOpenRequestError.InvalidArgument;
         }
 
         var smb_message_writer = SmbMessageWriter.init(.{
@@ -63,7 +63,7 @@ pub const SmbOpenRequest = struct {
     }
 };
 
-pub const SmbOpenResponse = struct {
+pub const SmbComOpenResponse = struct {
     error_status: SmbMessage.SmbError,
 
     fid: SmbMessage.FID,
@@ -72,7 +72,7 @@ pub const SmbOpenResponse = struct {
     file_size: u32,
     access_mode: u16,
 
-    pub fn deserialize(response: *const SmbMessage) !SmbOpenResponse {
+    pub fn deserialize(response: *const SmbMessage) !SmbComOpenResponse {
         var smb_message_reader = SmbMessageReader.init(response);
 
         const fid: SmbMessage.FID = try smb_message_reader.readParameter(SmbMessage.FID);
@@ -83,7 +83,7 @@ pub const SmbOpenResponse = struct {
         return .{ .error_status = response.header.status, .fid = fid, .file_attributes = file_attributes, .last_time_modified = last_time_modified, .file_size = file_size, .access_mode = access_mode };
     }
 
-    pub fn serialize(allocator: std.mem.Allocator, response: *const SmbOpenResponse) !SmbMessage {
+    pub fn serialize(allocator: std.mem.Allocator, response: *const SmbComOpenResponse) !SmbMessage {
         var smb_message_writer = SmbMessageWriter.init(.{
             .command = .SMB_COM_OPEN,
             .status = response.error_status,
@@ -101,15 +101,15 @@ pub const SmbOpenResponse = struct {
     }
 };
 
-test "SmbOpenRequest" {
+test "SmbComOpenRequest" {
     // Here we're doing a constCast as the filename is known at compile time
-    // but the SmbOpenRequest would only happen with runtime values as its
+    // but the SmbComOpenRequest would only happen with runtime values as its
     // purpose is to craft a request, involving compiletime unknown values.
     const filename: []u8 = @constCast("Hello.txt");
-    const request = SmbOpenRequest{ .exclusive_opportunistic_lock = true, .batch_exclusive_oplock = true, .tid = 10, .uid = 5, .access_mode = .ACCESS_MODE_READWRITE, .search_attributes = .SMB_FILE_ATTRIBUTE_NORMAL, .filename = filename };
+    const request = SmbComOpenRequest{ .exclusive_opportunistic_lock = true, .batch_exclusive_oplock = true, .tid = 10, .uid = 5, .access_mode = .ACCESS_MODE_READWRITE, .search_attributes = .SMB_FILE_ATTRIBUTE_NORMAL, .filename = filename };
     const allocator = std.testing.allocator;
 
-    var message = try SmbOpenRequest.serialize(allocator, &request);
+    var message = try SmbComOpenRequest.serialize(allocator, &request);
     defer message.deinit(allocator);
     try std.testing.expect(message.header.command == .SMB_COM_OPEN);
     try std.testing.expect(message.header.flags == (0 | @intFromEnum(SmbMessage.SmbFlags.SMB_FLAGS_OPLOCK) | @intFromEnum(SmbMessage.SmbFlags.SMB_FLAGS_OPBATCH)));
@@ -118,7 +118,7 @@ test "SmbOpenRequest" {
     try std.testing.expect(message.parameters.words_count == 2);
     try std.testing.expect(message.data.bytes_count == 11);
 
-    const requestMessage = try SmbOpenRequest.deserialize(&message, allocator);
+    const requestMessage = try SmbComOpenRequest.deserialize(&message, allocator);
     defer allocator.free(requestMessage.filename);
 
     try std.testing.expect(request.exclusive_opportunistic_lock == requestMessage.exclusive_opportunistic_lock);
@@ -130,11 +130,11 @@ test "SmbOpenRequest" {
     try std.testing.expect(std.mem.eql(u8, request.filename, requestMessage.filename));
 }
 
-test "SmbOpenReponse" {
-    const response = SmbOpenResponse{ .error_status = .{ .error_class = .ERRCLS_DOS, .error_code = .ERRDOS_BAD_FID }, .fid = 100, .last_time_modified = 0xFF00BBCC, .file_attributes = @intFromEnum(SmbMessage.SmbFileAttributes.SMB_FILE_ATTRIBUTE_NORMAL), .access_mode = @intFromEnum(SmbMessage.SmbAccessMode.ACCESS_MODE_READWRITE), .file_size = 0xFFFFFFFF };
+test "SmbComOpenReponse" {
+    const response = SmbComOpenResponse{ .error_status = .{ .error_class = .ERRCLS_DOS, .error_code = .ERRDOS_BAD_FID }, .fid = 100, .last_time_modified = 0xFF00BBCC, .file_attributes = @intFromEnum(SmbMessage.SmbFileAttributes.SMB_FILE_ATTRIBUTE_NORMAL), .access_mode = @intFromEnum(SmbMessage.SmbAccessMode.ACCESS_MODE_READWRITE), .file_size = 0xFFFFFFFF };
     const allocator = std.testing.allocator;
 
-    var message = try SmbOpenResponse.serialize(allocator, &response);
+    var message = try SmbComOpenResponse.serialize(allocator, &response);
     defer message.deinit(allocator);
 
     try std.testing.expect(message.header.command == .SMB_COM_OPEN);
@@ -143,7 +143,7 @@ test "SmbOpenReponse" {
     try std.testing.expect(message.parameters.words_count == 7);
     try std.testing.expect(message.data.bytes_count == 0);
 
-    const responseMessage = try SmbOpenResponse.deserialize(&message);
+    const responseMessage = try SmbComOpenResponse.deserialize(&message);
     try std.testing.expect(response.error_status.error_class == responseMessage.error_status.error_class);
     try std.testing.expect(response.error_status.error_code == responseMessage.error_status.error_code);
     try std.testing.expect(response.fid == responseMessage.fid);

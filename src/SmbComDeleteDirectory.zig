@@ -3,7 +3,7 @@ const SmbMessage = @import("SmbMessage.zig");
 const SmbMessageWriter = @import("SmbMessageWriter.zig");
 const SmbMessageReader = @import("SmbMessageReader.zig");
 
-pub const SmbDeleteRequest = struct {
+pub const SmbComDeleteRequest = struct {
     /// Whether to set the SMB_FLAGS2_LONG_NAMES flag.
     long_names: bool,
     tid: SmbMessage.TID,
@@ -13,7 +13,7 @@ pub const SmbDeleteRequest = struct {
 
     filename: []u8,
 
-    pub fn deserialize(request: *const SmbMessage, allocator: std.mem.Allocator) !SmbDeleteRequest {
+    pub fn deserialize(request: *const SmbMessage, allocator: std.mem.Allocator) !SmbComDeleteRequest {
         var smb_message_reader = SmbMessageReader.init(request);
 
         const long_names: bool = (request.header.flags2 & @intFromEnum(SmbMessage.SmbFlags2.SMB_FLAGS2_LONG_NAMES)) == @intFromEnum(SmbMessage.SmbFlags2.SMB_FLAGS2_LONG_NAMES);
@@ -27,7 +27,7 @@ pub const SmbDeleteRequest = struct {
         return .{ .long_names = long_names, .tid = tid, .uid = uid, .search_attributes = search_attributes, .filename = filename };
     }
 
-    pub fn serialize(allocator: std.mem.Allocator, request: *const SmbDeleteRequest) !SmbMessage {
+    pub fn serialize(allocator: std.mem.Allocator, request: *const SmbComDeleteRequest) !SmbMessage {
         var smb_message_writer = SmbMessageWriter.init(.{
             .command = .SMB_COM_DELETE,
             .flags2 = 0 | (@intFromEnum(SmbMessage.SmbFlags2.SMB_FLAGS2_LONG_NAMES) * @intFromBool(request.long_names)),
@@ -47,16 +47,16 @@ pub const SmbDeleteRequest = struct {
     }
 };
 
-pub const SmbDeleteResponse = struct {
+pub const SmbComDeleteResponse = struct {
     error_status: SmbMessage.SmbError,
 
-    pub fn deserialize(response: *const SmbMessage) SmbDeleteResponse {
+    pub fn deserialize(response: *const SmbMessage) SmbComDeleteResponse {
         return .{
             .error_status = response.header.status,
         };
     }
 
-    pub fn serialize(response: *const SmbDeleteResponse) SmbMessage {
+    pub fn serialize(response: *const SmbComDeleteResponse) SmbMessage {
         return .{ .header = .{
             .command = .SMB_COM_DELETE,
             .status = response.error_status,
@@ -64,15 +64,15 @@ pub const SmbDeleteResponse = struct {
     }
 };
 
-test "SmbDeleteRequest" {
+test "SmbComDeleteRequest" {
     // Here we're doing a constCast as the filename is known at compile time
-    // but the SmbDeleteRequest would only happen with runtime values as its
+    // but the SmbComDeleteRequest would only happen with runtime values as its
     // purpose is to craft a request, involving compiletime unknown values.
     const filename: []u8 = @constCast("Hello.txt");
-    const request = SmbDeleteRequest{ .long_names = true, .tid = 10, .uid = 5, .search_attributes = .SMB_FILE_ATTRIBUTE_NORMAL, .filename = filename };
+    const request = SmbComDeleteRequest{ .long_names = true, .tid = 10, .uid = 5, .search_attributes = .SMB_FILE_ATTRIBUTE_NORMAL, .filename = filename };
     const allocator = std.testing.allocator;
 
-    var message = try SmbDeleteRequest.serialize(allocator, &request);
+    var message = try SmbComDeleteRequest.serialize(allocator, &request);
     defer message.deinit(allocator);
     try std.testing.expect(message.header.command == .SMB_COM_DELETE);
     try std.testing.expect((message.header.flags2 & @intFromEnum(SmbMessage.SmbFlags2.SMB_FLAGS2_LONG_NAMES)) == @intFromEnum(SmbMessage.SmbFlags2.SMB_FLAGS2_LONG_NAMES));
@@ -81,7 +81,7 @@ test "SmbDeleteRequest" {
     try std.testing.expect(message.parameters.words_count == 1);
     try std.testing.expect(message.data.bytes_count == 11);
 
-    const requestMessage = try SmbDeleteRequest.deserialize(&message, allocator);
+    const requestMessage = try SmbComDeleteRequest.deserialize(&message, allocator);
     defer allocator.free(requestMessage.filename);
 
     try std.testing.expect(request.long_names == requestMessage.long_names);
@@ -91,10 +91,10 @@ test "SmbDeleteRequest" {
     try std.testing.expect(std.mem.eql(u8, request.filename, requestMessage.filename));
 }
 
-test "SmbDeleteReponse" {
-    const response = SmbDeleteResponse{ .error_status = .{ .error_class = .ERRCLS_DOS, .error_code = .ERRDOS_BAD_FID } };
+test "SmbComDeleteReponse" {
+    const response = SmbComDeleteResponse{ .error_status = .{ .error_class = .ERRCLS_DOS, .error_code = .ERRDOS_BAD_FID } };
 
-    const message = SmbDeleteResponse.serialize(&response);
+    const message = SmbComDeleteResponse.serialize(&response);
 
     try std.testing.expect(message.header.command == .SMB_COM_DELETE);
     try std.testing.expect(message.header.tid == 0x0000);
@@ -102,7 +102,7 @@ test "SmbDeleteReponse" {
     try std.testing.expect(message.parameters.words_count == 0);
     try std.testing.expect(message.data.bytes_count == 0);
 
-    const responseMessage = SmbDeleteResponse.deserialize(&message);
+    const responseMessage = SmbComDeleteResponse.deserialize(&message);
     try std.testing.expect(response.error_status.error_class == responseMessage.error_status.error_class);
     try std.testing.expect(response.error_status.error_code == responseMessage.error_status.error_code);
 }

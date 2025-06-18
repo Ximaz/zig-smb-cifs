@@ -3,13 +3,13 @@ const SmbMessage = @import("SmbMessage.zig");
 const SmbMessageWriter = @import("SmbMessageWriter.zig");
 const SmbMessageReader = @import("SmbMessageReader.zig");
 
-pub const SmbCreateDirectoryRequest = struct {
+pub const SmbComCreateDirectoryRequest = struct {
     tid: SmbMessage.TID,
     uid: SmbMessage.UID,
 
     pathname: []u8,
 
-    pub fn deserialize(request: *const SmbMessage, allocator: std.mem.Allocator) !SmbCreateDirectoryRequest {
+    pub fn deserialize(request: *const SmbMessage, allocator: std.mem.Allocator) !SmbComCreateDirectoryRequest {
         var smb_message_reader = SmbMessageReader.init(request);
 
         const tid: SmbMessage.TID = request.header.tid;
@@ -20,7 +20,7 @@ pub const SmbCreateDirectoryRequest = struct {
         return .{ .tid = tid, .uid = uid, .pathname = pathname };
     }
 
-    pub fn serialize(allocator: std.mem.Allocator, request: *const SmbCreateDirectoryRequest) !SmbMessage {
+    pub fn serialize(allocator: std.mem.Allocator, request: *const SmbComCreateDirectoryRequest) !SmbMessage {
         var smb_message_writer = SmbMessageWriter.init(.{
             .command = .SMB_COM_CREATE_DIRECTORY,
             .tid = request.tid,
@@ -36,14 +36,14 @@ pub const SmbCreateDirectoryRequest = struct {
     }
 };
 
-pub const SmbCreateDirectoryResponse = struct {
+pub const SmbComCreateDirectoryResponse = struct {
     error_status: SmbMessage.SmbError,
 
-    pub fn deserialize(response: *const SmbMessage) SmbCreateDirectoryResponse {
+    pub fn deserialize(response: *const SmbMessage) SmbComCreateDirectoryResponse {
         return .{ .error_status = response.header.status };
     }
 
-    pub fn serialize(response: *const SmbCreateDirectoryResponse) SmbMessage {
+    pub fn serialize(response: *const SmbComCreateDirectoryResponse) SmbMessage {
         return .{ .header = .{
             .command = .SMB_COM_CREATE_DIRECTORY,
             .status = response.error_status,
@@ -51,15 +51,15 @@ pub const SmbCreateDirectoryResponse = struct {
     }
 };
 
-test "SmbCreateDirectoryRequest" {
+test "SmbComCreateDirectoryRequest" {
     // Here we're doing a constCast as the pathname is known at compile time
-    // but the SmbCreateDirectoryRequest would only happen with runtime values as its
+    // but the SmbComCreateDirectoryRequest would only happen with runtime values as its
     // purpose is to craft a request, involving compiletime unknown values.
     const pathname: []u8 = @constCast("my_dir");
-    const request = SmbCreateDirectoryRequest{ .tid = 10, .uid = 5, .pathname = pathname };
+    const request = SmbComCreateDirectoryRequest{ .tid = 10, .uid = 5, .pathname = pathname };
     const allocator = std.testing.allocator;
 
-    var message = try SmbCreateDirectoryRequest.serialize(allocator, &request);
+    var message = try SmbComCreateDirectoryRequest.serialize(allocator, &request);
     defer message.deinit(allocator);
     try std.testing.expect(message.header.command == .SMB_COM_CREATE_DIRECTORY);
     try std.testing.expect(message.header.tid == 10);
@@ -67,7 +67,7 @@ test "SmbCreateDirectoryRequest" {
     try std.testing.expect(message.parameters.words_count == 0);
     try std.testing.expect(message.data.bytes_count == 8);
 
-    const requestMessage = try SmbCreateDirectoryRequest.deserialize(&message, allocator);
+    const requestMessage = try SmbComCreateDirectoryRequest.deserialize(&message, allocator);
     defer allocator.free(requestMessage.pathname);
 
     try std.testing.expect(request.uid == requestMessage.uid);
@@ -75,17 +75,17 @@ test "SmbCreateDirectoryRequest" {
     try std.testing.expect(std.mem.eql(u8, request.pathname, requestMessage.pathname));
 }
 
-test "SmbCreateDirectoryReponse" {
-    const response = SmbCreateDirectoryResponse{ .error_status = .{ .error_class = .ERRCLS_DOS, .error_code = .ERRDOS_BAD_FID } };
+test "SmbComCreateDirectoryReponse" {
+    const response = SmbComCreateDirectoryResponse{ .error_status = .{ .error_class = .ERRCLS_DOS, .error_code = .ERRDOS_BAD_FID } };
 
-    const message = SmbCreateDirectoryResponse.serialize(&response);
+    const message = SmbComCreateDirectoryResponse.serialize(&response);
     try std.testing.expect(message.header.command == .SMB_COM_CREATE_DIRECTORY);
     try std.testing.expect(message.header.tid == 0x0000);
     try std.testing.expect(message.header.uid == 0x0000);
     try std.testing.expect(message.parameters.words_count == 0);
     try std.testing.expect(message.data.bytes_count == 0);
 
-    const responseMessage = SmbCreateDirectoryResponse.deserialize(&message);
+    const responseMessage = SmbComCreateDirectoryResponse.deserialize(&message);
     try std.testing.expect(response.error_status.error_class == responseMessage.error_status.error_class);
     try std.testing.expect(response.error_status.error_code == responseMessage.error_status.error_code);
 }

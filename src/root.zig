@@ -4,15 +4,15 @@
 const std = @import("std");
 const testing = std.testing;
 pub const SmbMessage = @import("SmbMessage.zig");
-pub const SmbClose = @import("SmbClose.zig");
-pub const SmbCreate = @import("SmbCreate.zig");
-pub const SmbDelete = @import("SmbDelete.zig");
-pub const SmbCreateDirectory = @import("SmbCreateDirectory.zig");
-pub const SmbDeleteDirectory = @import("SmbDeleteDirectory.zig");
-pub const SmbFlush = @import("SmbFlush.zig");
-pub const SmbOpen = @import("SmbOpen.zig");
-pub const SmbQueryInformation = @import("SmbQueryInformation.zig");
-pub const SmbRead = @import("SmbRead.zig");
+pub const SmbComClose = @import("SmbComClose.zig");
+pub const SmbComCreate = @import("SmbComCreate.zig");
+pub const SmbComDelete = @import("SmbComDelete.zig");
+pub const SmbComCreateDirectory = @import("SmbComCreateDirectory.zig");
+pub const SmbComDeleteDirectory = @import("SmbComDeleteDirectory.zig");
+pub const SmbComFlush = @import("SmbComFlush.zig");
+pub const SmbComOpen = @import("SmbComOpen.zig");
+pub const SmbComQueryInformation = @import("SmbComQueryInformation.zig");
+pub const SmbComRead = @import("SmbComRead.zig");
 
 test {
     _ = std.testing.refAllDecls(@This());
