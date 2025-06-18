@@ -13,6 +13,7 @@ pub const SmbComFlush = @import("SmbComFlush.zig");
 pub const SmbComOpen = @import("SmbComOpen.zig");
 pub const SmbComQueryInformation = @import("SmbComQueryInformation.zig");
 pub const SmbComRead = @import("SmbComRead.zig");
+pub const SmbComRename = @import("SmbComRename.zig");
 
 test {
     _ = std.testing.refAllDecls(@This());
